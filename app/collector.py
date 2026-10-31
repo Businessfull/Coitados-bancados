@@ -198,7 +198,7 @@ def collect_once():
         "roster_names": len(allow), "players_updated": updated,
         "captured_at": stamp, "server_save": "10:00 America/Sao_Paulo",
         "daily_xp_method": "Tibia Watch Exp do Dia published measurement",
-        "ranking_warning": ranking_error,
+        "ranking_warning": ranking_error,\n        "warnings": [ranking_error] if ranking_error else [],
         "note": "A fonte Exp do Dia publica a variação entre leituras diárias do Tibia Watch; não é um histórico minuto a minuto nem garante leitura exatamente às 10h."
     }
     print("[collector]", result)
