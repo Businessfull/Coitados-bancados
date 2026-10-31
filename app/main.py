@@ -45,12 +45,7 @@ def seed_initial_players():
         c.execute(
             """INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
             VALUES(?,?,?,?,?,?,?,?)
-            ON CONFLICT(name) DO UPDATE SET
-              level=excluded.level,
-              total_xp=CASE WHEN excluded.total_xp>0 THEN excluded.total_xp ELSE players.total_xp END,
-              rank=excluded.rank,
-              updated_at=excluded.updated_at,
-              day=excluded.day""",
+            ON CONFLICT(name) DO NOTHING""",
             (name, level, 0, 0, total_xp, rank, stamp, day)
         )
     c.commit()
