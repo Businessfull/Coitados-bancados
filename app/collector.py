@@ -353,20 +353,21 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Collect the public Memorium highscores and calculate XP since server save.
+    """Collect exclusively from DeusOLD public guild and ranking pages.
 
-    The daily-XP mirror endpoint can return HTTP 403. Use the public world
-    highscores page instead: it exposes each character's cumulative XP.
-    Snapshots calculate recent XP (since previous poll) and daily XP (since
-    the first successful poll after the 10:00 server save). Missing roster
-    members keep their last known values.
+    Tibia Watch is intentionally not used as a source or fallback. If DeusOLD
+    blocks the request or changes its HTML, report the error instead of
+    publishing stale or third-party data as if it were live.
     """
-    result = collect_tibiawatch_public()
+    result = collect_official_once()
     return {
         "ok": True,
-        "sources": [result],
+        "sources": ["deusold_official_guild", "deusold_official_ranking"],
         "warnings": [],
         "players_updated": int(result.get("players_updated", 0)),
+        "guild_members": int(result.get("guild_members", 0)),
+        "ranking_rows": int(result.get("ranking_rows", 0)),
         "captured_at": result.get("captured_at"),
-        "source": "tibiawatch_public_highscores",
+        "source": "deusold_official",
+        "daily_xp_method": result.get("daily_xp_method"),
     }
