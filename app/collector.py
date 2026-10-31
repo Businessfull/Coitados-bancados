@@ -33,7 +33,7 @@ def db():
       updated_at TEXT, day TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS snapshots(
       id INTEGER PRIMARY KEY AUTOINCREMENT, captured_at TEXT, name TEXT,
-      level INTEGER, total_xp INTEGER, page INTEGER)""")
+      level INTEGER, total_xp INTEGER)""")
     c.execute("CREATE INDEX IF NOT EXISTS idx_snap_name_time ON snapshots(name,captured_at)")
     c.commit()
     return c
@@ -149,8 +149,8 @@ def collect_once():
           total_xp=COALESCE(excluded.total_xp,players.total_xp),
           rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
           (name, row["level"], daily, recent, row["total_xp"], row["rank"], stamp, game_day))
-        c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp,page) VALUES(?,?,?,?,?)",
-                  (stamp, name, row["level"], row["total_xp"], row["page"]))
+        c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",
+                  (stamp, name, row["level"], row["total_xp"]))
         updated += 1
     c.commit()
     c.close()
