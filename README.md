@@ -19,3 +19,10 @@ O coletor consulta as páginas públicas configuradas em `config.json`. O site o
 
 ## Segurança e acesso
 O painel é público e não exige cadastro. A rota de ingestão manual exige `X-Ingest-Key`; a chave nunca deve ser colocada no frontend.
+
+
+## Fallback de coleta
+
+Quando o DeusOLD retorna HTTP 403, o coletor tenta a página pública de XP diário do Tibia Watch (`daily_url`), sem contornar a proteção do servidor. Nesse modo, ele atualiza somente personagens explicitamente listados em `config.json` → `invited`. A lista inicial contém seis personagens Vitoriosos identificados publicamente. A página pública de XP diário não garante cobertura de todos os membros nem uma leitura exatamente a cada cinco minutos; por isso o painel identifica essa métrica como variação desde a leitura anterior. Personagens ausentes do quadro diário não terão atualização nessa fonte.
+
+A lista de personagens pode ser ampliada editando `invited` com os nomes exatos. Não inclua nomes sem confirmar que pertencem à guild.
