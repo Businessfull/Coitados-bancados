@@ -125,13 +125,13 @@ def fetch_highscores():
             f"Highscore retornou {len(unique)} de {len(targets)} personagens monitorados; "
             f"não encontrados nesta leitura: {', '.join(missing[:12])}"
         )
-    return list(unique.values()), errors
+    return list(unique.values()), errors, pages_checked
 
 def collect_once():
     allow = roster()
     if not allow:
         raise RuntimeError("A lista local de personagens está vazia.")
-    rows, errors = fetch_highscores()
+    rows, errors, pages_checked = fetch_highscores()
     now = datetime.now(TZ)
     stamp = now.isoformat(timespec="seconds")
     game_date = now.date() if now.hour >= int(CONFIG.get("server_save_hour", 10)) else now.date() - timedelta(days=1)
@@ -166,7 +166,7 @@ def collect_once():
     c.close()
     result = {
         "ok": True, "source": "official_deusold_highscores",
-        "source_url": RANKING_URL, "pages_checked": MAX_PAGES,
+        "source_url": RANKING_URL, "pages_checked": pages_checked,
         "roster_names": len(allow), "players_updated": updated,
         "captured_at": stamp, "server_save": f'{CONFIG.get("server_save_hour", 10):02d}:00 America/Sao_Paulo',
         "daily_xp_method": "difference_between_first_and_latest_official_highscore_snapshot_after_server_save",
