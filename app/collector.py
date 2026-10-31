@@ -16,8 +16,8 @@ BASE = Path(__file__).resolve().parent.parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data.sqlite3"))
 CONFIG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
 TZ = ZoneInfo(CONFIG.get("timezone", "America/Sao_Paulo"))
-RANKING_URL = "https://www.deusold.com/ranking"
-MAX_PAGES = int(os.getenv("MAX_RANKING_PAGES", "30"))
+RANKING_URL = CONFIG.get("ranking_url", "https://www.deusold.com/ranking")
+MAX_PAGES = int(os.getenv("MAX_RANKING_PAGES", str(CONFIG.get("max_pages", 30))))
 
 def norm(v):
     s = unicodedata.normalize("NFKD", str(v or "").strip().casefold())
@@ -100,17 +100,11 @@ def parse_page(html, page, targets):
 def fetch_highscores():
     targets = roster()
     all_rows, errors = [], []
-    empty_pages = 0
     for page in range(1, MAX_PAGES + 1):
         try:
             rows = parse_page(fetch_page(page), page, targets)
             if rows:
                 all_rows.extend(rows)
-                empty_pages = 0
-            else:
-                empty_pages += 1
-                if all_rows and empty_pages >= 2:
-                    break
         except Exception as exc:
             errors.append(str(exc))
             # A 403/429 na primeira página não será repetido em dezenas de páginas.
