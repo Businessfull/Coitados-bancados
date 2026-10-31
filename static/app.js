@@ -9,7 +9,7 @@ function render(){
  let q=$('search').value.toLowerCase(),sort=$('sort').value;
  let ps=data.players.filter(p=>(p.name||'').toLowerCase().includes(q));
  ps.sort((a,b)=>sort==='name'?(a.name||'').localeCompare(b.name||''):sort==='recent'?(b.recent_xp||0)-(a.recent_xp||0):(b.daily_xp||0)-(a.daily_xp||0));
- $('playerRows').innerHTML=ps.length?ps.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${n(p.level)}</td><td class="xp">${n(p.daily_xp)}</td><td class="recent">${n(p.recent_xp)}</td><td>${esc(p.updated_at)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Nenhum personagem encontrado.</td></tr>';
+ $('playerRows').innerHTML=ps.length?ps.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${n(p.level)}</td><td class="xp">${n(p.daily_xp)}</td><td>${n(p.total_xp)}</td><td class="recent">${n(p.recent_xp)}</td><td>${esc(p.updated_at)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Nenhum personagem encontrado.</td></tr>';
  $('deathRows').innerHTML=data.deaths.length?data.deaths.slice(0,40).map(d=>`<tr><td>${esc(d.time)}</td><td><b>${esc(d.character)}</b></td><td>${n(d.level)}</td><td>${esc(d.involved||d.cause)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Nenhuma morte registrada pela fonte disponível.</td></tr>';
  $('updated').textContent=c.last_success?'Última coleta concluída: '+new Date(c.last_success).toLocaleString('pt-BR'):'Aguardando a primeira coleta concluída';
  const notice=$('collectorNotice');
