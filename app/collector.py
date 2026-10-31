@@ -127,7 +127,7 @@ def server_save_start(now):
     return datetime.combine(now.date(), ss, TZ) if now.timetz().replace(tzinfo=None)>=ss else datetime.combine(now.date()-timedelta(days=1),ss,TZ)
 
 def collect_once():
-    now=datetime.now(TZ); stamp=now.isoformat(timespec="seconds"); day=now.date().isoformat()
+    now=datetime.now(TZ); stamp=now.isoformat(timespec="seconds"); day=(now-timedelta(hours=10)).date().isoformat()
     guild_soup=get_soup(CONFIG["guild_url"])
     official=roster_names(guild_soup)
     invited={x.casefold() for x in CONFIG.get("invited",[])}
@@ -135,19 +135,20 @@ def collect_once():
     if not allowed:
         raise RuntimeError("A página da guild não retornou membros. Verifique se o DeusOLD mudou o HTML ou bloqueou a coleta.")
     ranking=parse_ranking(get_soup(CONFIG["ranking_url"]))
-    daily=parse_daily(get_soup(CONFIG["daily_url"]))
     c=connect()
     accepted=0
     for key,row in ranking.items():
         if key not in allowed: continue
         prev=c.execute("SELECT total_xp,day FROM players WHERE name=?",(row["name"],)).fetchone()
         recent=max(0,row["total_xp"]-(prev["total_xp"] or 0)) if prev and prev["day"]==day else 0
-        daily_xp=daily.get(key, 0)
-        if key not in daily:
-            start=server_save_start(now).isoformat(timespec="seconds")
-            first=c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",(row["name"],start)).fetchone()
-            base=first["total_xp"] if first else row["total_xp"]
-            daily_xp=max(0,row["total_xp"]-base)
+        # Total earned since the 10:00 server save, using the first observed
+        # ranking snapshot as the baseline. The external "exp do dia" page is
+        # intentionally not used: it measures differences between crawler reads,
+        # not necessarily the complete guild total since server save.
+        start=server_save_start(now).isoformat(timespec="seconds")
+        first=c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",(row["name"],start)).fetchone()
+        base=first["total_xp"] if first else row["total_xp"]
+        daily_xp=max(0,row["total_xp"]-base)
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
         VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET level=excluded.level,daily_xp=excluded.daily_xp,
         recent_xp=excluded.recent_xp,total_xp=excluded.total_xp,rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
@@ -157,6 +158,6 @@ def collect_once():
     c.commit(); c.close()
     if accepted == 0:
         raise RuntimeError(f"Fontes acessíveis, mas nenhum membro da guild foi cruzado com o ranking (guild={len(official)}, ranking={len(ranking)}).")
-    result={"guild_members":len(official),"ranking_rows":len(ranking),"players_updated":accepted,"daily_source_rows":len(daily),"captured_at":stamp}
+    result={"guild_members":len(official),"ranking_rows":len(ranking),"players_updated":accepted,"daily_source_rows":0,"daily_xp_method":"ranking_since_first_snapshot_after_server_save","captured_at":stamp}
     print("[collector]",result)
     return result
