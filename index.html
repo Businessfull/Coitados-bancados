@@ -2,15 +2,15 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090d18"><title>Vitoriosos • Monitor</title><link rel="stylesheet" href="/static/style.css"></head>
 <body>
 <header><div class="brand"><div class="logo">V</div><div><small>GUILD TRACKER</small><h1>Vitoriosos</h1><p>Monitor público • DeusOLD</p></div></div><span id="connection" class="pill">● Conectando…</span></header>
-<main><div class="heading"><div><h2>Painel de atividade</h2><p>XP diário, evolução individual e mortes da guild</p></div><span id="updated">Última atualização: —</span></div>
+<main><div class="heading"><div><h2>Painel de atividade</h2><p>Base inicial dos prints + evolução diária e mortes da guild</p></div><span id="updated">Última atualização: —</span></div>
 <div class="metrics">
-<article><label>XP total hoje</label><strong id="totalXp">—</strong><small>Desde o Server Save</small></article>
+<article><label>XP diário registrado</label><strong id="totalXp">—</strong><small>Após início da coleta; base histórica não conta como XP de hoje</small></article>
 <article><label>XP desde a última leitura</label><strong id="recentXp">—</strong><small>Variação da fonte pública</small></article>
 <article><label>Personagens monitorados</label><strong id="players">—</strong><small>Membros acompanhados</small></article>
 <article><label>Mortes hoje</label><strong id="deaths">—</strong><small>Após Server Save</small></article>
 </div>
 <section id="collectorNotice" hidden style="border:1px solid #8b5b2b;background:#2a2017;border-radius:12px;padding:15px;margin-top:18px"><h3 id="collectorState" style="margin:0 0 7px;color:#ffd08a">Status da coleta</h3><p id="collectorError" style="margin:0;color:#f4dfc4;overflow-wrap:anywhere;font-size:13px"></p></section>
 <section><div class="section-head"><h3>Experiência por personagem</h3><div class="tools"><input id="search" placeholder="Buscar personagem…"><select id="sort"><option value="xp">Maior XP diário</option><option value="recent">Maior XP recente</option><option value="name">Nome A–Z</option></select></div></div>
-<div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Level</th><th>XP hoje</th><th>XP desde leitura anterior</th><th>Atualizado</th></tr></thead><tbody id="playerRows"><tr><td colspan="5" class="empty">Aguardando dados da API.</td></tr></tbody></table></div></section>
+<div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Level</th><th>XP diário</th><th>XP total</th><th>XP desde leitura anterior</th><th>Atualizado</th></tr></thead><tbody id="playerRows"><tr><td colspan="6" class="empty">Aguardando dados da API.</td></tr></tbody></table></div></section>
 <section><div class="section-head"><h3>Últimas mortes</h3><span class="tag">Histórico diário</span></div><div class="table-wrap"><table><thead><tr><th>Horário</th><th>Personagem</th><th>Level</th><th>Envolvidos / causa</th></tr></thead><tbody id="deathRows"><tr><td colspan="4" class="empty">Nenhuma morte carregada.</td></tr></tbody></table></div></section>
 <footer>Atualização automática a cada 5 minutos • Horário de Brasília</footer></main><script src="/static/app.js"></script></body></html>
