@@ -159,10 +159,26 @@ def ingest(payload: Ingest, x_ingest_key: str = Header(default="")):
     stamp = now.isoformat(timespec="seconds")
     day = game_day(now)
     c = db()
+    # Calculate XP deltas server-side; the browser only submits official highscore totals.
+    save_hour = 10
+    game_date = now.date() if now.hour >= save_hour else now.date() - timedelta(days=1)
+    day_start = datetime.combine(game_date, datetime.min.time().replace(hour=save_hour), TZ).isoformat(timespec="seconds")
     for p in payload.players:
+        previous = c.execute(
+            "SELECT total_xp FROM snapshots WHERE name=? AND total_xp IS NOT NULL ORDER BY id DESC LIMIT 1",
+            (p.name,)
+        ).fetchone()
+        first_today = c.execute(
+            "SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? AND total_xp IS NOT NULL ORDER BY id ASC LIMIT 1",
+            (p.name, day_start)
+        ).fetchone()
+        previous_xp = previous["total_xp"] if previous else None
+        first_xp = first_today["total_xp"] if first_today else None
+        recent_xp = max(0, p.total_xp - previous_xp) if p.total_xp is not None and previous_xp is not None else 0
+        daily_xp = max(0, p.total_xp - first_xp) if p.total_xp is not None and first_xp is not None else 0
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day) VALUES(?,?,?,?,?,?,?,?)
-        ON CONFLICT(name) DO UPDATE SET level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,total_xp=excluded.total_xp,rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
-        (p.name,p.level,p.daily_xp,p.recent_xp,p.total_xp,p.rank,p.updated_at or stamp,day))
+        ON CONFLICT(name) DO UPDATE SET level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,total_xp=COALESCE(excluded.total_xp,players.total_xp),rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
+        (p.name,p.level,daily_xp,recent_xp,p.total_xp,p.rank,stamp,day))
         c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",(stamp,p.name,p.level,p.total_xp))
     for d in payload.deaths:
         key = f"{day}|{d.time}|{d.character}|{d.level}|{d.involved}"
