@@ -6,7 +6,7 @@ Fontes públicas:
 
 Não consulta páginas bloqueadas do DeusOLD nem tenta contornar proteções.
 """
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
@@ -151,18 +151,28 @@ def collect_once():
     if not allow:
         raise RuntimeError("Lista local vazia: seed_vitoriosos.json não foi carregado.")
 
-    # XP diário é obtido diretamente da tabela pública Exp do Dia.
-    daily = fetch_daily_xp()
+    # Use the publisher's daily table when reachable; otherwise calculate from
+    # total-XP snapshots collected since the 10:00 server save.
+    try:
+        daily = fetch_daily_xp()
+        daily_error = None
+    except Exception as exc:
+        daily = {}
+        daily_error = str(exc)
     try:
         ranking = fetch_highscores()
         ranking_error = None
     except Exception as exc:
         ranking = {}
         ranking_error = str(exc)
+    if not daily and not ranking:
+        raise RuntimeError(f"Falha nas duas fontes públicas. Exp do Dia: {daily_error}; Highscores: {ranking_error}")
 
     now = datetime.now(TZ)
     stamp = now.isoformat(timespec="seconds")
-    game_day = now.date().isoformat() if now.hour >= 10 else (now.date().fromordinal(now.date().toordinal()-1)).isoformat()
+    game_date = now.date() if now.hour >= 10 else now.date() - timedelta(days=1)
+    game_day = game_date.isoformat()
+    start = datetime.combine(game_date, time(10, 0), TZ).isoformat(timespec="seconds")
     c = db()
     updated = 0
     for key, canonical in allow.items():
@@ -174,8 +184,19 @@ def collect_once():
         previous = c.execute(
             "SELECT total_xp FROM snapshots WHERE name=? ORDER BY id DESC LIMIT 1", (canonical,)
         ).fetchone()
+        first_today = c.execute(
+            "SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",
+            (canonical, start)
+        ).fetchone()
         recent = max(0, total_xp - previous["total_xp"]) if previous and total_xp else 0
-        daily_value = d.get("daily_xp", 0)
+        # Prefer Tibia Watch's published daily value. If a character is not in
+        # that top list, fall back to the service's own post-SS snapshots.
+        if key in daily:
+            daily_value = d["daily_xp"]
+        elif total_xp and first_today:
+            daily_value = max(0, total_xp - first_today["total_xp"])
+        else:
+            daily_value = 0
         rank = r.get("rank", 0)
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
           VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET
