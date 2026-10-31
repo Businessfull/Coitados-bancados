@@ -353,10 +353,9 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Collect live public data, preferring DeusOLD and falling back to Tibia Watch.
+    """Try official DeusOLD pages, then both public Tibia Watch sources.
 
-    Both sources are public pages. No login, private endpoint, or access-control
-    bypass is attempted. The fallback is used only when the official pages fail.
+    No login, private endpoint, or access-control bypass is attempted.
     """
     official_error = None
     try:
@@ -374,8 +373,9 @@ def collect_once():
         }
     except Exception as exc:
         official_error = str(exc)
-        print("[collector] official source failed; trying public Tibia Watch fallback:", official_error)
+        print("[collector] official source failed; trying public mirrors:", official_error)
 
+    daily_error = None
     try:
         result = collect_tibiawatch_fallback(official_error)
         return {
@@ -389,9 +389,30 @@ def collect_once():
             "source": result.get("source", "tibiawatch_daily_public"),
             "daily_xp_method": result.get("recent_xp_method"),
         }
-    except Exception as fallback_error:
+    except Exception as exc:
+        daily_error = str(exc)
+        print("[collector] daily XP mirror failed; trying public highscores:", daily_error)
+
+    try:
+        result = collect_tibiawatch_public()
+        return {
+            "ok": True,
+            "sources": ["tibiawatch_public_highscores"],
+            "warnings": [
+                f"Fonte oficial indisponível: {official_error[:180]}",
+                f"XP diário indisponível; usando highscores públicos: {daily_error[:180]}",
+            ],
+            "players_updated": int(result.get("players_updated", 0)),
+            "guild_members": 0,
+            "ranking_rows": int(result.get("ranking_rows", 0)),
+            "captured_at": result.get("captured_at"),
+            "source": result.get("source", "tibiawatch_public_highscores"),
+            "daily_xp_method": result.get("daily_xp_method"),
+        }
+    except Exception as public_error:
         raise RuntimeError(
             "Nenhuma fonte pública conseguiu fornecer dados. "
-            f"DeusOLD: {official_error[:250]} | "
-            f"Tibia Watch: {str(fallback_error)[:250]}"
-        ) from fallback_error
+            f"DeusOLD: {official_error[:180]} | "
+            f"Tibia Watch XP diário: {daily_error[:180]} | "
+            f"Tibia Watch highscores: {str(public_error)[:180]}"
+        ) from public_error
