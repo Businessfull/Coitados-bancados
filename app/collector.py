@@ -244,12 +244,95 @@ def collect_tibiawatch_fallback(reason):
     return result
 
 
+
+
+def load_seed_roster():
+    """Use the saved roster as a filter when the public guild mirror has no members."""
+    seed_path = BASE / "seed_vitoriosos.json"
+    try:
+        payload = json.loads(seed_path.read_text(encoding="utf-8"))
+        return {norm(row[0]).casefold() for row in payload.get("players", []) if row and row[0]}
+    except (OSError, ValueError, TypeError, IndexError):
+        return set()
+
+
+def parse_tibiawatch_world(soup, world):
+    """Read the public world overview's server-rendered highscore rows."""
+    found = {}
+    for tr in soup.select("tr"):
+        cells = [norm(x.get_text(" ", strip=True)) for x in tr.select("th,td")]
+        if len(cells) < 4:
+            continue
+        if any(x.casefold() in ("personagem", "character", "experiência", "experience") for x in cells):
+            continue
+        # Overview rows contain rank, character, vocation, level and XP.
+        name = next((x for x in cells if x and not re.fullmatch(r"#?\d+", x)
+                     and not re.search(r"\d", x) and len(x) < 40
+                     and x.casefold() not in {"elite knight", "knight", "royal paladin",
+                         "paladin", "master sorcerer", "sorcerer", "elder druid", "druid"}), "")
+        if not name:
+            continue
+        level = next((parse_level(x) for x in cells if re.fullmatch(r"\d{1,4}", x)), 0)
+        xp = next((number(x) for x in reversed(cells) if re.search(r"\d", x)
+                   and (re.search(r"[kKmM]", x) or len(re.sub(r"\D", "", x)) >= 5)), 0)
+        if level and xp:
+            rank_match = re.match(r"#?(\d+)", cells[0])
+            found[name.casefold()] = {"name": name, "level": level, "total_xp": xp,
+                                      "rank": int(rank_match.group(1)) if rank_match else 0}
+    return found
+
+
+def collect_tibiawatch_public():
+    """Collect public highscores mirror; no login, game client, or access-control bypass."""
+    url = "https://tibiawatch.com/deusold/memorium"
+    soup = get_soup(url)
+    ranking = parse_tibiawatch_world(soup, CONFIG.get("world", "Memorium"))
+    if not ranking:
+        raise RuntimeError("Tibia Watch respondeu, mas o HTML público não trouxe linhas de highscores legíveis.")
+    allowed = load_seed_roster() | {norm(x).casefold() for x in CONFIG.get("invited", [])}
+    selected = [row for key, row in ranking.items() if key in allowed]
+    if not selected:
+        raise RuntimeError(f"Highscores públicos acessíveis ({len(ranking)} linhas), mas nenhum nome da lista Vitoriosos apareceu.")
+    now = datetime.now(TZ)
+    stamp = now.isoformat(timespec="seconds")
+    day = (now - timedelta(hours=10)).date().isoformat()
+    start = server_save_start(now).isoformat(timespec="seconds")
+    c = connect()
+    for row in selected:
+        prev = c.execute("SELECT total_xp,day FROM players WHERE name=?", (row["name"],)).fetchone()
+        recent = max(0, row["total_xp"] - (prev["total_xp"] or 0)) if prev and prev["day"] == day else 0
+        first = c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",
+                          (row["name"], start)).fetchone()
+        baseline = first["total_xp"] if first else row["total_xp"]
+        daily = max(0, row["total_xp"] - baseline)
+        c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
+          VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET
+          level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,
+          total_xp=excluded.total_xp,rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
+          (row["name"], row["level"], daily, recent, row["total_xp"], row["rank"], stamp, day))
+        c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",
+                  (stamp, row["name"], row["level"], row["total_xp"]))
+    c.commit()
+    c.close()
+    result = {"source": "tibiawatch_public_highscores", "ranking_rows": len(ranking),
+              "players_updated": len(selected), "captured_at": stamp,
+              "daily_xp_method": "difference_since_first_snapshot_after_10am"}
+    print("[collector:tibiawatch]", result)
+    return result
+
+
 def collect_once():
+    # First try the public highscore mirror, which documents that it rebuilds
+    # rankings from DeusOLD's published highscores. Never bypass a 403.
+    try:
+        return collect_tibiawatch_public()
+    except Exception as mirror_error:
+        print("[collector] Tibia Watch highscore mirror unavailable:", repr(mirror_error))
     try:
         return collect_official_once()
     except RuntimeError as exc:
         message = str(exc)
         if "HTTP 403" not in message:
             raise
-        print("[collector] DeusOLD recusou a leitura pública; usando fonte pública alternativa.")
+        print("[collector] DeusOLD recusou a leitura pública; usando XP diário público como último fallback.")
         return collect_tibiawatch_fallback(message)
