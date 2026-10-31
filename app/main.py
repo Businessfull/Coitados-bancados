@@ -134,7 +134,15 @@ def health():
 def dashboard():
     today = game_day()
     c = db()
-    players = [dict(x) for x in c.execute("SELECT name,level,daily_xp,recent_xp,total_xp,rank,updated_at FROM players ORDER BY daily_xp DESC, total_xp DESC, name ASC")]
+    players = [dict(x) for x in c.execute(
+        """SELECT name,level,
+        CASE WHEN day=? THEN daily_xp ELSE 0 END AS daily_xp,
+        CASE WHEN day=? THEN recent_xp ELSE 0 END AS recent_xp,
+        total_xp,rank,updated_at,day
+        FROM players ORDER BY
+        CASE WHEN day=? THEN daily_xp ELSE 0 END DESC,
+        total_xp DESC,name ASC""", (today,today,today)
+    )]
     deaths = [dict(x) for x in c.execute("SELECT time,character,level,involved FROM deaths WHERE day=? ORDER BY id DESC LIMIT 100", (today,))]
     status = c.execute("SELECT last_success,last_error FROM collector_status WHERE id=1").fetchone()
     c.close()
