@@ -32,7 +32,7 @@ def db():
     return c
 
 def seed_initial_players():
-    """Idempotently import screenshot roster; never overwrite newer live readings."""
+    """Import the roster and the XP values transcribed from the user's screenshots."""
     seed_path = BASE / "seed_vitoriosos.json"
     if not seed_path.exists():
         print("[seed] seed_vitoriosos.json not found")
@@ -41,20 +41,21 @@ def seed_initial_players():
     stamp = now_local().isoformat(timespec="seconds")
     day = game_day()
     c = db()
-    added = 0
     for name, level, rank, total_xp in payload.get("players", []):
-        exists = c.execute("SELECT name FROM players WHERE name=?", (name,)).fetchone()
-        if not exists:
-            c.execute(
-                "INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day) VALUES(?,?,?,?,?,?,?,?)",
-                (name, level, 0, 0, total_xp, rank, stamp, day)
-            )
-            c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",
-                      (stamp, name, level, total_xp))
-            added += 1
+        c.execute(
+            """INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
+            VALUES(?,?,?,?,?,?,?,?)
+            ON CONFLICT(name) DO UPDATE SET
+              level=excluded.level,
+              total_xp=CASE WHEN excluded.total_xp>0 THEN excluded.total_xp ELSE players.total_xp END,
+              rank=excluded.rank,
+              updated_at=excluded.updated_at,
+              day=excluded.day""",
+            (name, level, 0, 0, total_xp, rank, stamp, day)
+        )
     c.commit()
     c.close()
-    print(f"[seed] roster checked; {added} new players imported; {len(payload.get('players', []))} in roster")
+    print(f"[seed] {len(payload.get('players', []))} screenshot roster entries loaded")
 
 def update_collector_status(success=False, error=None):
     c = db()
@@ -138,7 +139,7 @@ def dashboard():
     c.close()
     return {"summary": {"total_xp": sum(p["daily_xp"] or 0 for p in players), "recent_xp": sum(p["recent_xp"] or 0 for p in players), "player_count": len(players), "death_count": len(deaths)},
             "players": players, "deaths": deaths,
-            "collector": {"last_success": status["last_success"] if status else None, "last_error": status["last_error"] if status else None}}
+            "collector": {"last_success": status["last_success"] if status else None, "last_error": (status["last_error"] if status else None) if os.getenv("ENABLE_COLLECTOR", "1") == "1" else None, "mode": "automatic" if os.getenv("ENABLE_COLLECTOR", "1") == "1" else "screenshot_baseline"}}
 
 @app.post("/api/ingest")
 def ingest(payload: Ingest, x_ingest_key: str = Header(default="")):
