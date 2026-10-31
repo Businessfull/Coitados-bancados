@@ -32,25 +32,29 @@ def db():
     return c
 
 def seed_initial_players():
-    """Load the screenshot baseline once, only when the database is empty."""
+    """Idempotently import screenshot roster; never overwrite newer live readings."""
     seed_path = BASE / "seed_vitoriosos.json"
     if not seed_path.exists():
+        print("[seed] seed_vitoriosos.json not found")
         return
+    payload = json.loads(seed_path.read_text(encoding="utf-8"))
+    stamp = now_local().isoformat(timespec="seconds")
+    day = game_day()
     c = db()
-    if c.execute("SELECT COUNT(*) FROM players").fetchone()[0] == 0:
-        payload = json.loads(seed_path.read_text(encoding="utf-8"))
-        stamp = now_local().isoformat(timespec="seconds")
-        day = game_day()
-        for name, level, rank, total_xp in payload.get("players", []):
+    added = 0
+    for name, level, rank, total_xp in payload.get("players", []):
+        exists = c.execute("SELECT name FROM players WHERE name=?", (name,)).fetchone()
+        if not exists:
             c.execute(
-                "INSERT OR IGNORE INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day) VALUES(?,?,?,?,?,?,?,?)",
+                "INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day) VALUES(?,?,?,?,?,?,?,?)",
                 (name, level, 0, 0, total_xp, rank, stamp, day)
             )
             c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",
                       (stamp, name, level, total_xp))
-        c.commit()
-        print(f"[seed] Loaded {len(payload.get('players', []))} screenshot baseline players")
+            added += 1
+    c.commit()
     c.close()
+    print(f"[seed] roster checked; {added} new players imported; {len(payload.get('players', []))} in roster")
 
 def update_collector_status(success=False, error=None):
     c = db()
@@ -128,7 +132,7 @@ def health():
 def dashboard():
     today = game_day()
     c = db()
-    players = [dict(x) for x in c.execute("SELECT name,level,daily_xp,recent_xp,total_xp,rank,updated_at FROM players WHERE day=? ORDER BY daily_xp DESC", (today,))]
+    players = [dict(x) for x in c.execute("SELECT name,level,daily_xp,recent_xp,total_xp,rank,updated_at FROM players ORDER BY daily_xp DESC, total_xp DESC, name ASC")]
     deaths = [dict(x) for x in c.execute("SELECT time,character,level,involved FROM deaths WHERE day=? ORDER BY id DESC LIMIT 100", (today,))]
     status = c.execute("SELECT last_success,last_error FROM collector_status WHERE id=1").fetchone()
     c.close()
