@@ -1,25 +1,23 @@
 # Coitados Bancados — monitor Vitoriosos / Memorium
 
-Painel público e responsivo para celular e computador. A coleta usa exclusivamente fontes públicas do Tibia Watch derivadas dos highscores do Memorium. O coletor **não acessa o site do DeusOLD**.
+Painel público e responsivo para celular e computador.
 
-## Dados monitorados
-- Personagens cruzados com a lista local `seed_vitoriosos.json` e os convidados em `config.json`.
-- Level e XP diário quando publicados no feed público de XP.
-- Variação entre leituras sucessivas da fonte, quando a fonte publica novos dados.
-- XP total e ranking quando disponíveis no quadro público de highscores.
-- Server Save diário às 10:00 (America/Sao_Paulo).
-- Tentativa automática a cada 5 minutos.
+## Coleta automática
+- Fonte do coletor: página pública de highscores do Tibia Watch: https://tibiawatch.com/deusold/highscores
+- O coletor NÃO consulta páginas de guild ou ranking bloqueadas do DeusOLD e não tenta contornar Cloudflare.
+- Os personagens do ranking são cruzados com a lista local `seed_vitoriosos.json` e os nomes adicionais de `config.json` → `invited`.
+- Level, XP total e posição vêm do ranking público.
+- XP recente é a diferença entre duas leituras consecutivas.
+- XP diário é a diferença entre a primeira e a última leitura após o server save das 10:00 (America/Sao_Paulo).
+- A coleta roda a cada 5 minutos (`POLL_SECONDS=300`).
 
-## Fontes e limites
-1. Principal: `https://tibiawatch.com/deusold/exp-de-hoje`, feed público derivado das leituras de highscores.
-2. Fallback: `https://tibiawatch.com/deusold/memorium`, quadro público de highscores do mundo Memorium.
+## Limites importantes
+O ranking público pode mostrar somente os personagens dentro da profundidade publicada pelo site. O painel não pode mostrar personagens ausentes da fonte. O XP diário começa na primeira leitura bem-sucedida depois do server save; não é possível reconstruir retroativamente o XP anterior à primeira leitura. A frequência de execução do coletor não garante que a origem atualize o ranking a cada cinco minutos.
 
-O feed diário pode atualizar em intervalos definidos pela fonte; portanto, a coleta do painel roda a cada cinco minutos, mas isso não garante que o site publique números novos a cada cinco minutos. A variação recente só muda quando a fonte disponibiliza uma leitura nova. O fallback da página de mundo pode mostrar apenas uma parte do ranking; não é usado para inventar dados de personagens ausentes.
-
-A lista de membros é local e funciona como filtro. Para incluir todos os integrantes, os nomes precisam estar cadastrados em `seed_vitoriosos.json` ou em `config.json` → `invited`. O coletor não consulta a página da guild para descobrir membros.
+Se o Render receber HTTP 403 do Tibia Watch, a origem está recusando a conexão automatizada desse serviço. É necessário que a origem permita o acesso ou forneça um endpoint/API público autorizado. O coletor registra esse erro claramente e não tenta contornar a proteção.
 
 ## Publicar
-O arquivo `render.yaml` configura o serviço web Python com disco persistente para o banco SQLite. O Render lê o Blueprint e cria o serviço.
+O arquivo `render.yaml` configura o serviço web Python e o disco persistente para o banco SQLite. O Render publica automaticamente após cada commit na branch conectada.
 
 ## Segurança
 O painel é público e não exige cadastro. A rota de ingestão manual exige `X-Ingest-Key`; a chave nunca deve ser colocada no frontend.
