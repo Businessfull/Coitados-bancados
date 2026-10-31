@@ -353,20 +353,20 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Use the verified public DeusOld daily-XP leaderboard as the sole live source.
+    """Collect the public Memorium highscores and calculate XP since server save.
 
-    The DeusOLD origin currently refuses automated requests (HTTP 403). Do not
-    keep retrying that blocked origin or depend on its HTML. Tibia Watch
-    publishes a public DeusOld daily-XP leaderboard; we filter it against the
-    saved Vitoriosos roster and update only names actually present in that
-    source. Missing names retain their last known values instead of becoming 0.
+    The daily-XP mirror endpoint can return HTTP 403. Use the public world
+    highscores page instead: it exposes each character's cumulative XP.
+    Snapshots calculate recent XP (since previous poll) and daily XP (since
+    the first successful poll after the 10:00 server save). Missing roster
+    members keep their last known values.
     """
-    result = collect_tibiawatch_fallback("fonte oficial DeusOLD indisponível/bloqueada")
+    result = collect_tibiawatch_public()
     return {
         "ok": True,
         "sources": [result],
         "warnings": [],
         "players_updated": int(result.get("players_updated", 0)),
         "captured_at": result.get("captured_at"),
-        "source": "tibiawatch_daily_public",
+        "source": "tibiawatch_public_highscores",
     }
