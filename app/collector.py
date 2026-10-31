@@ -8,9 +8,9 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import json, os, re, sqlite3, unicodedata, requests
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+import json, os, re, sqlite3, unicodedata
 
 BASE = Path(__file__).resolve().parent.parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data.sqlite3"))
@@ -18,17 +18,6 @@ CONFIG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
 TZ = ZoneInfo(CONFIG.get("timezone", "America/Sao_Paulo"))
 RANKING_URL = "https://www.deusold.com/ranking"
 MAX_PAGES = int(os.getenv("MAX_RANKING_PAGES", "30"))
-
-S = requests.Session()
-S.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml",
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-})
-retry = Retry(total=2, connect=2, read=1, backoff_factor=1,
-              status_forcelist=(429, 500, 502, 503, 504),
-              allowed_methods=frozenset(["GET"]))
-S.mount("https://", HTTPAdapter(max_retries=retry))
 
 def norm(v):
     s = unicodedata.normalize("NFKD", str(v or "").strip().casefold())
@@ -60,17 +49,22 @@ def roster():
     return {norm(n): n for n in names if n}
 
 def fetch_page(page):
-    url = f"{RANKING_URL}?page={page}"
+    url = RANKING_URL + "?" + urlencode({"page": page})
+    req = Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"
+    })
     try:
-        response = S.get(url, timeout=(10, 30))
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Página {page}: falha de conexão: {exc}") from exc
-    if response.status_code == 403:
-        raise RuntimeError(f"Highscore oficial recusou acesso automatizado (HTTP 403) na página {page}.")
-    if response.status_code == 429:
-        raise RuntimeError(f"Highscore oficial limitou as consultas (HTTP 429) na página {page}.")
-    response.raise_for_status()
-    return response.text
+        with urlopen(req, timeout=25) as response:
+            return response.read().decode("utf-8", "ignore")
+    except Exception as exc:
+        code = getattr(exc, "code", None)
+        if code == 403:
+            raise RuntimeError(f"Highscore oficial recusou acesso automatizado (HTTP 403) na página {page}.") from exc
+        if code == 429:
+            raise RuntimeError(f"Highscore oficial limitou as consultas (HTTP 429) na página {page}.") from exc
+        raise RuntimeError(f"Página {page}: falha ao consultar o Highscore oficial: {exc}") from exc
 
 def parse_page(html, page, targets):
     soup = BeautifulSoup(html, "html.parser")
@@ -88,14 +82,13 @@ def parse_page(html, page, targets):
         level = None
         xp = None
         for value in cells[2:]:
-            digits = re.sub(r"[^0-9]", "", value)
-            if not digits:
-                continue
-            n = int(digits)
-            if level is None and 1 <= n <= 300 and re.fullmatch(r"\d+", value.replace(",", "")):
-                level = n
-            elif n > 1000:
-                xp = n
+            numeric = value.replace(",", "").replace(".", "")
+            if re.fullmatch(r"\\d+", numeric):
+                n = int(numeric)
+                if level is None and 1 <= n <= 300:
+                    level = n
+                elif n > 1000:
+                    xp = n
         if level is not None:
             rank_match = re.match(r"#?(\d+)", cells[0])
             found.append({
