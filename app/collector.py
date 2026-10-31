@@ -83,7 +83,7 @@ def parse_page(html, page, targets):
         xp = None
         for value in cells[2:]:
             numeric = value.replace(",", "").replace(".", "")
-            if re.fullmatch(r"\\d+", numeric):
+            if re.fullmatch(r"\d+", numeric):
                 n = int(numeric)
                 if level is None and 1 <= n <= 300:
                     level = n
