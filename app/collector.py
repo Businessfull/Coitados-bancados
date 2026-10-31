@@ -1,10 +1,8 @@
-"""Coletor de highscores e XP diário do Tibia Watch para DeusOLD.
+"""Coletor exclusivo do Highscore oficial do DeusOLD.
 
-Fontes públicas:
-- /deusold/highscores: level e XP total mais recente.
-- /deusold/exp-de-hoje: XP diário publicado pelo Tibia Watch.
-
-Não consulta páginas bloqueadas do DeusOLD nem tenta contornar proteções.
+Percorre as páginas públicas de /ranking, cruza os nomes com
+seed_vitoriosos.json e mede XP por snapshots a cada cinco minutos.
+Não usa Tibia Watch nem páginas de guild bloqueadas.
 """
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -18,13 +16,13 @@ BASE = Path(__file__).resolve().parent.parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data.sqlite3"))
 CONFIG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
 TZ = ZoneInfo(CONFIG.get("timezone", "America/Sao_Paulo"))
-RANKING_URL = "https://tibiawatch.com/deusold/highscores"
-DAILY_URL = "https://tibiawatch.com/deusold/exp-de-hoje"
+RANKING_URL = "https://www.deusold.com/ranking"
+MAX_PAGES = int(os.getenv("MAX_RANKING_PAGES", "30"))
 
 S = requests.Session()
 S.headers.update({
-    "User-Agent": "Mozilla/5.0 (compatible; CoitadosBancados/1.1; public highscores monitor)",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml",
     "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
 })
 retry = Retry(total=2, connect=2, read=1, backoff_factor=1,
@@ -33,28 +31,9 @@ retry = Retry(total=2, connect=2, read=1, backoff_factor=1,
 S.mount("https://", HTTPAdapter(max_retries=retry))
 
 def norm(v):
-    return re.sub(r"\s+", " ", str(v or "")).strip()
-
-def name_key(v):
-    s = unicodedata.normalize("NFKD", norm(v).casefold())
-    return re.sub(r"\s+", " ", "".join(c for c in s if not unicodedata.combining(c))).strip()
-
-def number(v):
-    s = norm(v).lower().replace("xp", "").replace("+", "").replace(" ", "")
-    s = s.replace(",", ".")
-    mult = 1
-    if s.endswith(("kk", "m")):
-        mult = 1_000_000
-        s = s[:-2] if s.endswith("kk") else s[:-1]
-    elif s.endswith("k"):
-        mult, s = 1_000, s[:-1]
-    try:
-        if mult != 1:
-            return int(float(s) * mult)
-    except ValueError:
-        return 0
-    digits = re.sub(r"[^0-9]", "", s)
-    return int(digits) if digits else 0
+    s = unicodedata.normalize("NFKD", str(v or "").strip().casefold())
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", s)
 
 def db():
     c = sqlite3.connect(DB, timeout=30)
@@ -65,162 +44,137 @@ def db():
       updated_at TEXT, day TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS snapshots(
       id INTEGER PRIMARY KEY AUTOINCREMENT, captured_at TEXT, name TEXT,
-      level INTEGER, total_xp INTEGER)""")
+      level INTEGER, total_xp INTEGER, page INTEGER)""")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_snap_name_time ON snapshots(name,captured_at)")
     c.commit()
     return c
 
 def roster():
-    names = []
+    path = BASE / "seed_vitoriosos.json"
     try:
-        data = json.loads((BASE / "seed_vitoriosos.json").read_text(encoding="utf-8"))
-        names.extend(norm(row[0]) for row in data.get("players", []) if row and row[0])
-    except (OSError, ValueError, TypeError, IndexError):
-        pass
-    names.extend(norm(x) for x in CONFIG.get("invited", []) if norm(x))
-    return {name_key(n): n for n in names if n}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        names = [str(row[0]).strip() for row in data.get("players", []) if row and row[0]]
+    except (OSError, ValueError, TypeError, IndexError) as exc:
+        raise RuntimeError(f"Não foi possível carregar seed_vitoriosos.json: {exc}") from exc
+    names.extend(str(x).strip() for x in CONFIG.get("invited", []) if str(x).strip())
+    return {norm(n): n for n in names if n}
 
-def fetch_html(url):
+def fetch_page(page):
+    url = f"{RANKING_URL}?page={page}"
     try:
-        response = S.get(url, timeout=(10, 35))
+        response = S.get(url, timeout=(10, 30))
     except requests.RequestException as exc:
-        raise RuntimeError(f"Falha de conexão com {url}: {exc}") from exc
+        raise RuntimeError(f"Página {page}: falha de conexão: {exc}") from exc
     if response.status_code == 403:
-        raise RuntimeError(f"Fonte pública recusou a coleta automatizada (HTTP 403): {url}")
+        raise RuntimeError(f"Highscore oficial recusou acesso automatizado (HTTP 403) na página {page}.")
     if response.status_code == 429:
-        raise RuntimeError(f"Fonte pública limitou as requisições (HTTP 429): {url}")
+        raise RuntimeError(f"Highscore oficial limitou as consultas (HTTP 429) na página {page}.")
     response.raise_for_status()
-    return BeautifulSoup(response.text, "html.parser")
+    return response.text
 
-def row_name(tr, cells):
-    # Em ambas as tabelas o nome do personagem é um link.
-    for a in tr.select("a"):
-        text = norm(a.get_text(" ", strip=True))
-        if text and not re.fullmatch(r"#?\d+", text):
-            return text
-    return cells[1] if len(cells) > 1 else ""
+def parse_page(html, page, targets):
+    soup = BeautifulSoup(html, "html.parser")
+    found = []
+    for tr in soup.select("tr"):
+        cells = [re.sub(r"\s+", " ", td.get_text(" ", strip=True)).strip()
+                 for td in tr.select("td,th")]
+        if len(cells) < 5:
+            continue
+        # Formato original do ranking: rank, nome, vocação, mundo, level, experiência.
+        name = cells[1]
+        key = norm(name)
+        if key not in targets:
+            continue
+        level = None
+        xp = None
+        for value in cells[2:]:
+            digits = re.sub(r"[^0-9]", "", value)
+            if not digits:
+                continue
+            n = int(digits)
+            if level is None and 1 <= n <= 300 and re.fullmatch(r"\d+", value.replace(",", "")):
+                level = n
+            elif n > 1000:
+                xp = n
+        if level is not None:
+            rank_match = re.match(r"#?(\d+)", cells[0])
+            found.append({
+                "name": targets[key], "level": level, "total_xp": xp,
+                "rank": int(rank_match.group(1)) if rank_match else 0, "page": page
+            })
+    return found
 
 def fetch_highscores():
-    soup = fetch_html(RANKING_URL)
-    found = {}
-    for tr in soup.select("tr"):
-        cells = [norm(td.get_text(" ", strip=True)) for td in tr.select("th,td")]
-        if len(cells) < 6 or "Memorium" not in cells:
-            continue
-        name = row_name(tr, cells)
-        # A linha tem rank, personagem, guild, mundo, level, total XP e variação.
-        world_index = cells.index("Memorium")
-        level = 0
-        for cell in cells[world_index + 1:]:
-            m = re.match(r"^(\d{1,3})", cell)
-            if m:
-                level = int(m.group(1))
+    targets = roster()
+    all_rows, errors = [], []
+    empty_pages = 0
+    for page in range(1, MAX_PAGES + 1):
+        try:
+            rows = parse_page(fetch_page(page), page, targets)
+            if rows:
+                all_rows.extend(rows)
+                empty_pages = 0
+            else:
+                empty_pages += 1
+                if all_rows and empty_pages >= 2:
+                    break
+        except Exception as exc:
+            errors.append(str(exc))
+            # A 403/429 na primeira página não será repetido em dezenas de páginas.
+            if "HTTP 403" in str(exc) or "HTTP 429" in str(exc):
                 break
-        xp_values = [number(cell) for cell in cells if re.search(r"(?i)(kk|\bM\b|\bk\b)", cell)]
-        if name and level and xp_values:
-            rank_match = re.match(r"#?(\d+)", cells[0])
-            found[name_key(name)] = {
-                "name": name, "level": level, "total_xp": max(xp_values),
-                "rank": int(rank_match.group(1)) if rank_match else 0
-            }
-    if not found:
-        raise RuntimeError("Highscores respondeu, mas nenhuma linha válida de Memorium foi identificada.")
-    return found
-
-def fetch_daily_xp():
-    soup = fetch_html(DAILY_URL)
-    found = {}
-    for tr in soup.select("tr"):
-        cells = [norm(td.get_text(" ", strip=True)) for td in tr.select("th,td")]
-        if len(cells) < 6 or "Memorium" not in cells:
-            continue
-        name = row_name(tr, cells)
-        if not name:
-            continue
-        # Formato publicado: rank, personagem, mundo, vocação, level, XP no dia.
-        xp = number(cells[-1])
-        level_match = re.match(r"^(\d{1,3})", cells[-2]) if len(cells) >= 2 else None
-        level = int(level_match.group(1)) if level_match else 0
-        if xp >= 0:
-            found[name_key(name)] = {"daily_xp": xp, "level": level}
-    if not found:
-        raise RuntimeError("A página Exp do Dia respondeu, mas nenhuma linha de Memorium foi identificada.")
-    return found
+    if not all_rows:
+        detail = " | ".join(errors[:3]) if errors else "nenhum personagem da lista foi encontrado nas páginas consultadas"
+        raise RuntimeError(f"Não foi possível coletar membros no Highscore oficial: {detail}")
+    # Keep the most recent occurrence of each monitored character.
+    unique = {}
+    for row in all_rows:
+        unique[norm(row["name"])] = row
+    return list(unique.values()), errors
 
 def collect_once():
     allow = roster()
     if not allow:
-        raise RuntimeError("Lista local vazia: seed_vitoriosos.json não foi carregado.")
-
-    # Use the publisher's daily table when reachable; otherwise calculate from
-    # total-XP snapshots collected since the 10:00 server save.
-    try:
-        daily = fetch_daily_xp()
-        daily_error = None
-    except Exception as exc:
-        daily = {}
-        daily_error = str(exc)
-    try:
-        ranking = fetch_highscores()
-        ranking_error = None
-    except Exception as exc:
-        ranking = {}
-        ranking_error = str(exc)
-    if not daily and not ranking:
-        raise RuntimeError(f"Falha nas duas fontes públicas. Exp do Dia: {daily_error}; Highscores: {ranking_error}")
-
+        raise RuntimeError("A lista local de personagens está vazia.")
+    rows, errors = fetch_highscores()
     now = datetime.now(TZ)
     stamp = now.isoformat(timespec="seconds")
-    game_date = now.date() if now.hour >= 10 else now.date() - timedelta(days=1)
+    game_date = now.date() if now.hour >= int(CONFIG.get("server_save_hour", 10)) else now.date() - timedelta(days=1)
     game_day = game_date.isoformat()
-    start = datetime.combine(game_date, time(10, 0), TZ).isoformat(timespec="seconds")
+    start = datetime.combine(game_date, time(int(CONFIG.get("server_save_hour", 10)), 0), TZ).isoformat(timespec="seconds")
+
     c = db()
     updated = 0
-    for key, canonical in allow.items():
-        d = daily.get(key, {})
-        r = ranking.get(key, {})
-        old = c.execute("SELECT total_xp,level FROM players WHERE name=?", (canonical,)).fetchone()
-        total_xp = r.get("total_xp", old["total_xp"] if old else 0)
-        level = r.get("level", d.get("level", old["level"] if old else 0))
+    for row in rows:
+        name = row["name"]
         previous = c.execute(
-            "SELECT total_xp FROM snapshots WHERE name=? ORDER BY id DESC LIMIT 1", (canonical,)
+            "SELECT total_xp FROM snapshots WHERE name=? ORDER BY id DESC LIMIT 1", (name,)
         ).fetchone()
         first_today = c.execute(
             "SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",
-            (canonical, start)
+            (name, start)
         ).fetchone()
-        recent = max(0, total_xp - previous["total_xp"]) if previous and total_xp else 0
-        # Prefer Tibia Watch's published daily value. If a character is not in
-        # that top list, fall back to the service's own post-SS snapshots.
-        if key in daily:
-            daily_value = d["daily_xp"]
-        elif total_xp and first_today:
-            daily_value = max(0, total_xp - first_today["total_xp"])
-        else:
-            daily_value = 0
-        rank = r.get("rank", 0)
+        recent = max(0, row["total_xp"] - previous["total_xp"]) if previous and row["total_xp"] is not None else 0
+        daily = max(0, row["total_xp"] - first_today["total_xp"]) if first_today and row["total_xp"] is not None else 0
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
           VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET
-          level=CASE WHEN excluded.level>0 THEN excluded.level ELSE players.level END,
-          daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,
-          total_xp=CASE WHEN excluded.total_xp>0 THEN excluded.total_xp ELSE players.total_xp END,
-          rank=CASE WHEN excluded.rank>0 THEN excluded.rank ELSE players.rank END,
-          updated_at=excluded.updated_at,day=excluded.day""",
-          (canonical, level, daily_value, recent, total_xp, rank, stamp, game_day))
-        if total_xp:
-            c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",
-                      (stamp, canonical, level, total_xp))
+          level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,
+          total_xp=COALESCE(excluded.total_xp,players.total_xp),
+          rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
+          (name, row["level"], daily, recent, row["total_xp"], row["rank"], stamp, game_day))
+        c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp,page) VALUES(?,?,?,?,?)",
+                  (stamp, name, row["level"], row["total_xp"], row["page"]))
         updated += 1
     c.commit()
     c.close()
     result = {
-        "ok": True, "source": "tibiawatch_public_highscores_and_daily_xp",
-        "ranking_url": RANKING_URL, "daily_url": DAILY_URL,
-        "daily_rows": len(daily), "ranking_rows": len(ranking),
+        "ok": True, "source": "official_deusold_highscores",
+        "source_url": RANKING_URL, "pages_checked": MAX_PAGES,
         "roster_names": len(allow), "players_updated": updated,
-        "captured_at": stamp, "server_save": "10:00 America/Sao_Paulo",
-        "daily_xp_method": "Tibia Watch Exp do Dia published measurement",
-        "ranking_warning": ranking_error,\n        "warnings": [ranking_error] if ranking_error else [],
-        "note": "A fonte Exp do Dia publica a variação entre leituras diárias do Tibia Watch; não é um histórico minuto a minuto nem garante leitura exatamente às 10h."
+        "captured_at": stamp, "server_save": f'{CONFIG.get("server_save_hour", 10):02d}:00 America/Sao_Paulo',
+        "daily_xp_method": "difference_between_first_and_latest_official_highscore_snapshot_after_server_save",
+        "warnings": errors,
+        "note": "XP diário começa na primeira leitura bem-sucedida após o server save; a primeira leitura serve como linha de base."
     }
     print("[collector]", result)
     return result
