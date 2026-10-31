@@ -14,8 +14,10 @@ Painel público e responsivo para celular e computador. Mostra apenas os membros
 ## Publicar
 O arquivo `render.yaml` configura um serviço web Python com disco persistente para o banco SQLite. Abra o repositório no Render e escolha **New > Blueprint**, conecte o GitHub e selecione este repositório. O Render lê o Blueprint e cria o serviço. O plano Starter e o disco persistente são pagos; a implantação exige autorização da conta Render.
 
-## Importante sobre a fonte
-O coletor consulta as páginas públicas configuradas em `config.json`. O site oficial DeusOLD pode bloquear requisições automatizadas ou alterar o HTML. O coletor registra erros nos logs e precisa ser validado após a primeira implantação. A página pública de XP diário do Tibia Watch pode ser usada como fonte complementar; ela não substitui o ranking oficial para o XP dos últimos 5 minutos.
+## Fonte ativa e limites
+O coletor usa como fonte principal a página pública [Top exp do dia no DeusOld](https://tibiawatch.com/deusold/exp-de-hoje), filtrando os nomes contra `seed_vitoriosos.json`. O acesso automatizado ao site do DeusOLD pode retornar HTTP 403; o coletor não tenta contornar essa proteção. Personagens ausentes no ranking diário mantêm o último valor conhecido, nunca são zerados por ausência.
+
+A página pública informa XP acumulada entre as leituras do Tibia Watch, não uma medição garantida a cada cinco minutos. Portanto, `recent_xp` é a diferença entre leituras dessa fonte e pode permanecer zerado enquanto ela não publicar uma nova leitura. Para XP realmente exata a cada cinco minutos e histórico completo de mortes, é necessário que o DeusOLD forneça uma API/feed público ou autorize acesso automatizado.
 
 ## Segurança e acesso
 O painel é público e não exige cadastro. A rota de ingestão manual exige `X-Ingest-Key`; a chave nunca deve ser colocada no frontend.
