@@ -8,7 +8,7 @@ Painel público e responsivo para celular e computador.
 - Os personagens do ranking são cruzados com a lista local `seed_vitoriosos.json` e os nomes adicionais de `config.json` → `invited`.
 - Level, XP total e posição vêm do ranking público.
 - XP recente é a diferença entre duas leituras consecutivas.
-- XP diário vem da tabela pública Exp do Dia do Tibia Watch. A própria fonte descreve a medição entre leituras diárias; ela não garante uma captura exatamente às 10h nem fornece XP minuto a minuto.
+- XP diário prioriza a tabela pública Exp do Dia do Tibia Watch. Se ela estiver indisponível, o serviço calcula a diferença entre snapshots de XP total desde as 10h (America/Sao_Paulo). A fonte diária não garante captura exatamente às 10h nem fornece XP minuto a minuto.
 - A coleta roda a cada 5 minutos (`POLL_SECONDS=300`).
 
 ## Limites importantes
