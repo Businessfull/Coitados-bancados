@@ -115,6 +115,12 @@ app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 def home():
     return FileResponse(BASE / "index.html")
 
+@app.head("/")
+def home_head():
+    # Render/proxies may probe with HEAD; answer health probes without serving the page.
+    from fastapi import Response
+    return Response(status_code=200)
+
 @app.get("/api/health")
 def health():
     c = db()
