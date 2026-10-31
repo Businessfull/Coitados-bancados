@@ -353,21 +353,45 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Collect exclusively from DeusOLD public guild and ranking pages.
+    """Collect live public data, preferring DeusOLD and falling back to Tibia Watch.
 
-    Tibia Watch is intentionally not used as a source or fallback. If DeusOLD
-    blocks the request or changes its HTML, report the error instead of
-    publishing stale or third-party data as if it were live.
+    Both sources are public pages. No login, private endpoint, or access-control
+    bypass is attempted. The fallback is used only when the official pages fail.
     """
-    result = collect_official_once()
-    return {
-        "ok": True,
-        "sources": ["deusold_official_guild", "deusold_official_ranking"],
-        "warnings": [],
-        "players_updated": int(result.get("players_updated", 0)),
-        "guild_members": int(result.get("guild_members", 0)),
-        "ranking_rows": int(result.get("ranking_rows", 0)),
-        "captured_at": result.get("captured_at"),
-        "source": "deusold_official",
-        "daily_xp_method": result.get("daily_xp_method"),
-    }
+    official_error = None
+    try:
+        result = collect_official_once()
+        return {
+            "ok": True,
+            "sources": ["deusold_official_guild", "deusold_official_ranking"],
+            "warnings": [],
+            "players_updated": int(result.get("players_updated", 0)),
+            "guild_members": int(result.get("guild_members", 0)),
+            "ranking_rows": int(result.get("ranking_rows", 0)),
+            "captured_at": result.get("captured_at"),
+            "source": "deusold_official",
+            "daily_xp_method": result.get("daily_xp_method"),
+        }
+    except Exception as exc:
+        official_error = str(exc)
+        print("[collector] official source failed; trying public Tibia Watch fallback:", official_error)
+
+    try:
+        result = collect_tibiawatch_fallback(official_error)
+        return {
+            "ok": True,
+            "sources": ["tibiawatch_public_daily"],
+            "warnings": [f"Fonte oficial indisponível: {official_error[:250]}"],
+            "players_updated": int(result.get("players_updated", 0)),
+            "guild_members": 0,
+            "ranking_rows": int(result.get("daily_rows", 0)),
+            "captured_at": result.get("captured_at"),
+            "source": result.get("source", "tibiawatch_daily_public"),
+            "daily_xp_method": result.get("recent_xp_method"),
+        }
+    except Exception as fallback_error:
+        raise RuntimeError(
+            "Nenhuma fonte pública conseguiu fornecer dados. "
+            f"DeusOLD: {official_error[:250]} | "
+            f"Tibia Watch: {str(fallback_error)[:250]}"
+        ) from fallback_error
