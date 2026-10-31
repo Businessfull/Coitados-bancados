@@ -353,39 +353,22 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Prefer the public world highscores page, which exposes level + total XP.
+    """Use Tibia Watch's measured daily XP feed first.
 
-    The separate daily-XP page may reject automated requests with HTTP 403.
-    Use the public highscores mirror first and calculate XP from snapshots;
-    never bypass access controls or fabricate XP when a source is unavailable.
+    The daily feed contains all measured characters across worlds and can be
+    filtered to the saved Vitoriosos roster. The world overview only exposes
+    a small top-20 preview, so it is a secondary source. DeusOLD remains the
+    final public-source fallback; never bypass access controls or invent XP.
     """
     errors = []
 
-    # This page is independently accessible and contains the exact fields
-    # needed by the dashboard: character, level and total experience.
+    # Primary: complete daily XP table (includes world + measured XP).
     try:
-        result = collect_tibiawatch_public()
-        return {
-            "ok": True,
-            "sources": ["tibiawatch_public_highscores"],
-            "warnings": [],
-            "players_updated": int(result.get("players_updated", 0)),
-            "guild_members": 0,
-            "ranking_rows": int(result.get("ranking_rows", 0)),
-            "captured_at": result.get("captured_at"),
-            "source": result.get("source", "tibiawatch_public_highscores"),
-            "daily_xp_method": result.get("daily_xp_method"),
-        }
-    except Exception as exc:
-        errors.append(f"Tibia Watch highscores: {str(exc)[:250]}")
-        print("[collector] public highscores failed; trying daily feed:", repr(exc))
-
-    try:
-        result = collect_tibiawatch_fallback("highscores públicos indisponíveis")
+        result = collect_tibiawatch_fallback("prioridade: feed diário público")
         return {
             "ok": True,
             "sources": ["tibiawatch_public_daily"],
-            "warnings": [errors[0]],
+            "warnings": [],
             "players_updated": int(result.get("players_updated", 0)),
             "guild_members": 0,
             "ranking_rows": int(result.get("daily_rows", 0)),
@@ -395,8 +378,27 @@ def collect_once():
         }
     except Exception as exc:
         errors.append(f"Tibia Watch XP diário: {str(exc)[:250]}")
-        print("[collector] daily feed failed; trying official source:", repr(exc))
+        print("[collector] daily feed failed; trying world highscores:", repr(exc))
 
+    # Secondary: public world highscores. XP/day is calculated from snapshots.
+    try:
+        result = collect_tibiawatch_public()
+        return {
+            "ok": True,
+            "sources": ["tibiawatch_public_highscores"],
+            "warnings": [errors[0]],
+            "players_updated": int(result.get("players_updated", 0)),
+            "guild_members": 0,
+            "ranking_rows": int(result.get("ranking_rows", 0)),
+            "captured_at": result.get("captured_at"),
+            "source": result.get("source", "tibiawatch_public_highscores"),
+            "daily_xp_method": result.get("daily_xp_method"),
+        }
+    except Exception as exc:
+        errors.append(f"Tibia Watch highscores: {str(exc)[:250]}")
+        print("[collector] public highscores failed; trying official source:", repr(exc))
+
+    # Last resort: official DeusOLD pages, if the origin permits public access.
     try:
         result = collect_official_once()
         return {
