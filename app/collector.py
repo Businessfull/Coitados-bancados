@@ -346,17 +346,36 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    # First try the public highscore mirror, which documents that it rebuilds
-    # rankings from DeusOLD's published highscores. Never bypass a 403.
-    try:
-        return collect_tibiawatch_public()
-    except Exception as mirror_error:
-        print("[collector] Tibia Watch highscore mirror unavailable:", repr(mirror_error))
-    try:
-        return collect_official_once()
-    except RuntimeError as exc:
-        message = str(exc)
-        if "HTTP 403" not in message:
-            raise
-        print("[collector] DeusOLD recusou a leitura pública; usando XP diário público como último fallback.")
-        return collect_tibiawatch_fallback(message)
+    """Combine public highscore, official public pages, and daily XP mirror.
+
+    The mirror's world overview may expose only a short top list. The daily
+    XP page is therefore collected as a supplement on every cycle so roster
+    members outside that short list are not silently omitted. No 403 bypass.
+    """
+    results = []
+    errors = []
+
+    for label, collector in (
+        ("tibiawatch_highscores", collect_tibiawatch_public),
+        ("deusold_public_pages", collect_official_once),
+        ("tibiawatch_daily_xp", lambda: collect_tibiawatch_fallback(
+            "fonte complementar de XP diário público"
+        )),
+    ):
+        try:
+            results.append({"source": label, **collector()})
+        except Exception as exc:
+            message = f"{label}: {exc}"
+            errors.append(message)
+            print("[collector] Fonte indisponível:", message)
+
+    if not results:
+        raise RuntimeError("Nenhuma fonte pública conseguiu atualizar o monitor. " + " | ".join(errors))
+
+    return {
+        "ok": True,
+        "sources": results,
+        "warnings": errors,
+        "players_updated": sum(int(item.get("players_updated", 0)) for item in results),
+        "captured_at": datetime.now(TZ).isoformat(timespec="seconds"),
+    }
