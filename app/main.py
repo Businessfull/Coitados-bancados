@@ -67,7 +67,7 @@ class Player(BaseModel):
     level: int = 0
     daily_xp: int = 0
     recent_xp: int = 0
-    total_xp: int = 0
+    total_xp: int | None = None
     rank: int = 0
     updated_at: str = ""
 class Death(BaseModel):
