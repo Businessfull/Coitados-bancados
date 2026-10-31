@@ -353,35 +353,20 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Try official DeusOLD pages, then both public Tibia Watch sources.
+    """Prefer the public Tibia Watch daily feed, then public highscores.
 
-    No login, private endpoint, or access-control bypass is attempted.
+    The DeusOLD origin may reject cloud-hosted collectors with HTTP 403.
+    Try the independently published public mirror first; never bypass
+    access controls or fabricate XP when a source is unavailable.
     """
-    official_error = None
-    try:
-        result = collect_official_once()
-        return {
-            "ok": True,
-            "sources": ["deusold_official_guild", "deusold_official_ranking"],
-            "warnings": [],
-            "players_updated": int(result.get("players_updated", 0)),
-            "guild_members": int(result.get("guild_members", 0)),
-            "ranking_rows": int(result.get("ranking_rows", 0)),
-            "captured_at": result.get("captured_at"),
-            "source": "deusold_official",
-            "daily_xp_method": result.get("daily_xp_method"),
-        }
-    except Exception as exc:
-        official_error = str(exc)
-        print("[collector] official source failed; trying public mirrors:", official_error)
+    errors = []
 
-    daily_error = None
     try:
-        result = collect_tibiawatch_fallback(official_error)
+        result = collect_tibiawatch_fallback("coleta direta do DeusOLD não priorizada")
         return {
             "ok": True,
             "sources": ["tibiawatch_public_daily"],
-            "warnings": [f"Fonte oficial indisponível: {official_error[:250]}"],
+            "warnings": [],
             "players_updated": int(result.get("players_updated", 0)),
             "guild_members": 0,
             "ranking_rows": int(result.get("daily_rows", 0)),
@@ -390,18 +375,15 @@ def collect_once():
             "daily_xp_method": result.get("recent_xp_method"),
         }
     except Exception as exc:
-        daily_error = str(exc)
-        print("[collector] daily XP mirror failed; trying public highscores:", daily_error)
+        errors.append(f"Tibia Watch XP diário: {str(exc)[:250]}")
+        print("[collector] daily feed failed; trying public highscores:", repr(exc))
 
     try:
         result = collect_tibiawatch_public()
         return {
             "ok": True,
             "sources": ["tibiawatch_public_highscores"],
-            "warnings": [
-                f"Fonte oficial indisponível: {official_error[:180]}",
-                f"XP diário indisponível; usando highscores públicos: {daily_error[:180]}",
-            ],
+            "warnings": [errors[0]],
             "players_updated": int(result.get("players_updated", 0)),
             "guild_members": 0,
             "ranking_rows": int(result.get("ranking_rows", 0)),
@@ -409,10 +391,26 @@ def collect_once():
             "source": result.get("source", "tibiawatch_public_highscores"),
             "daily_xp_method": result.get("daily_xp_method"),
         }
-    except Exception as public_error:
+    except Exception as exc:
+        errors.append(f"Tibia Watch highscores: {str(exc)[:250]}")
+        print("[collector] public highscores failed; trying official source:", repr(exc))
+
+    try:
+        result = collect_official_once()
+        return {
+            "ok": True,
+            "sources": ["deusold_official_guild", "deusold_official_ranking"],
+            "warnings": errors,
+            "players_updated": int(result.get("players_updated", 0)),
+            "guild_members": int(result.get("guild_members", 0)),
+            "ranking_rows": int(result.get("ranking_rows", 0)),
+            "captured_at": result.get("captured_at"),
+            "source": "deusold_official",
+            "daily_xp_method": result.get("daily_xp_method"),
+        }
+    except Exception as exc:
+        errors.append(f"DeusOLD oficial: {str(exc)[:250]}")
         raise RuntimeError(
             "Nenhuma fonte pública conseguiu fornecer dados. "
-            f"DeusOLD: {official_error[:180]} | "
-            f"Tibia Watch XP diário: {daily_error[:180]} | "
-            f"Tibia Watch highscores: {str(public_error)[:180]}"
-        ) from public_error
+            + " | ".join(errors)
+        ) from exc
