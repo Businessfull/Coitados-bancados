@@ -126,7 +126,7 @@ def server_save_start(now):
     ss=time(10,0)
     return datetime.combine(now.date(), ss, TZ) if now.timetz().replace(tzinfo=None)>=ss else datetime.combine(now.date()-timedelta(days=1),ss,TZ)
 
-def collect_once():
+def collect_official_once():
     now=datetime.now(TZ); stamp=now.isoformat(timespec="seconds"); day=(now-timedelta(hours=10)).date().isoformat()
     guild_soup=get_soup(CONFIG["guild_url"])
     official=roster_names(guild_soup)
@@ -161,3 +161,95 @@ def collect_once():
     result={"guild_members":len(official),"ranking_rows":len(ranking),"players_updated":accepted,"daily_source_rows":0,"daily_xp_method":"ranking_since_first_snapshot_after_server_save","captured_at":stamp}
     print("[collector]",result)
     return result
+
+
+def parse_tibiawatch_daily(soup, world):
+    """Parse Tibia Watch's public daily XP table; never infer guild membership."""
+    found = {}
+    vocations = {"knight", "elite knight", "paladin", "royal paladin",
+                 "sorcerer", "master sorcerer", "druid", "elder druid", "monk"}
+    for tr in soup.select("tr"):
+        cells = [norm(x.get_text(" ", strip=True)) for x in tr.select("th,td")]
+        if len(cells) < 5:
+            continue
+        if world.casefold() not in [x.casefold() for x in cells]:
+            continue
+        xp = number(cells[-1])
+        if xp <= 0:
+            continue
+        name = next((x for x in cells if x and not re.fullmatch(r"#?\d+", x)
+                     and x.casefold() != world.casefold()
+                     and x.casefold() not in vocations
+                     and not re.search(r"[+]?\d", x)
+                     and len(x) < 40), "")
+        if not name:
+            continue
+        level = 0
+        for cell in cells:
+            if re.fullmatch(r"\d{1,4}(?:\+\d+)?", cell):
+                level = parse_level(cell)
+        rank_match = re.match(r"#?(\d+)", cells[0])
+        found[name.casefold()] = {
+            "name": name, "level": level, "daily_xp": xp,
+            "rank": int(rank_match.group(1)) if rank_match else 0
+        }
+    return found
+
+
+def collect_tibiawatch_fallback(reason):
+    url = CONFIG.get("daily_url", "")
+    if not url:
+        raise RuntimeError(f"Fonte oficial indisponível ({reason}); daily_url não configurada.")
+    soup = get_soup(url)
+    rows = parse_tibiawatch_daily(soup, CONFIG.get("world", "Memorium"))
+    allowed = {norm(x).casefold() for x in CONFIG.get("invited", []) if norm(x)}
+    if not allowed:
+        raise RuntimeError(
+            f"Fonte oficial recusou acesso ({reason}); Tibia Watch retornou {len(rows)} linhas, "
+            "mas não há lista de personagens autorizada/configurada para filtrar a guild."
+        )
+    selected = [r for k, r in rows.items() if k in allowed]
+    if not selected:
+        raise RuntimeError(
+            f"Fallback Tibia Watch acessível ({len(rows)} linhas), mas nenhum personagem "
+            "da lista configurada apareceu no XP diário."
+        )
+
+    now = datetime.now(TZ)
+    stamp = now.isoformat(timespec="seconds")
+    day = (now - timedelta(hours=10)).date().isoformat()
+    c = connect()
+    for row in selected:
+        prev = c.execute("SELECT daily_xp, day, total_xp FROM players WHERE name=?",
+                         (row["name"],)).fetchone()
+        previous_daily = prev["daily_xp"] if prev and prev["day"] == day else 0
+        recent = max(0, row["daily_xp"] - (previous_daily or 0))
+        c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
+        VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET
+        level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,
+        rank=excluded.rank,updated_at=excluded.updated_at,day=excluded.day""",
+        (row["name"], row["level"], row["daily_xp"], recent,
+         prev["total_xp"] if prev else 0, row["rank"], stamp, day))
+    c.commit()
+    c.close()
+    result = {
+        "source": "tibiawatch_daily_public",
+        "official_source_error": str(reason)[:300],
+        "daily_rows": len(rows),
+        "players_updated": len(selected),
+        "recent_xp_method": "difference_between_daily_source_reads",
+        "captured_at": stamp
+    }
+    print("[collector:fallback]", result)
+    return result
+
+
+def collect_once():
+    try:
+        return collect_official_once()
+    except RuntimeError as exc:
+        message = str(exc)
+        if "HTTP 403" not in message:
+            raise
+        print("[collector] DeusOLD recusou a leitura pública; usando fonte pública alternativa.")
+        return collect_tibiawatch_fallback(message)
