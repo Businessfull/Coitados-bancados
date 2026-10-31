@@ -100,7 +100,9 @@ def parse_page(html, page, targets):
 def fetch_highscores():
     targets = roster()
     all_rows, errors = [], []
+    pages_checked = 0
     for page in range(1, MAX_PAGES + 1):
+        pages_checked = page
         try:
             rows = parse_page(fetch_page(page), page, targets)
             if rows:
@@ -141,8 +143,10 @@ def collect_once():
             "SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",
             (name, start)
         ).fetchone()
-        recent = max(0, row["total_xp"] - previous["total_xp"]) if previous and row["total_xp"] is not None else 0
-        daily = max(0, row["total_xp"] - first_today["total_xp"]) if first_today and row["total_xp"] is not None else 0
+        previous_xp = previous["total_xp"] if previous else None
+        first_today_xp = first_today["total_xp"] if first_today else None
+        recent = max(0, row["total_xp"] - previous_xp) if row["total_xp"] is not None and previous_xp is not None else 0
+        daily = max(0, row["total_xp"] - first_today_xp) if row["total_xp"] is not None and first_today_xp is not None else 0
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
           VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET
           level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,
