@@ -236,8 +236,12 @@ def collect_tibiawatch_fallback(reason):
     for row in selected:
         prev = c.execute("SELECT daily_xp, day, total_xp FROM players WHERE name=?",
                          (row["name"],)).fetchone()
-        previous_daily = prev["daily_xp"] if prev and prev["day"] == day else 0
-        recent = max(0, row["daily_xp"] - (previous_daily or 0))
+        # On the first reading of a game day there is no previous
+        # observation, so do not mislabel the full daily total as 5-minute XP.
+        recent = (
+            max(0, row["daily_xp"] - (prev["daily_xp"] or 0))
+            if prev and prev["day"] == day else 0
+        )
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day)
         VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET
         level=excluded.level,daily_xp=excluded.daily_xp,recent_xp=excluded.recent_xp,
