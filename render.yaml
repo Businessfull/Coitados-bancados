@@ -14,7 +14,7 @@ services:
       - key: DATABASE_PATH
         value: /var/data/monitor.sqlite3
       - key: ENABLE_COLLECTOR
-        value: "1"
+        value: "0"
       - key: POLL_SECONDS
         value: "300"
       - key: PYTHON_VERSION
