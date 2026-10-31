@@ -1,17 +1,15 @@
 <!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Coitados Bancados — Painel</title>
-  <link rel="stylesheet" href="static/style.css">
-</head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090d18"><title>Vitoriosos • Monitor</title><link rel="stylesheet" href="/static/style.css"></head>
 <body>
-  <main class="container">
-    <header><div><p class="eyebrow">MONITORAMENTO</p><h1>Coitados Bancados</h1><p class="muted">Painel público de atividade e experiência</p></div><span id="status" class="status">Conectando…</span></header>
-    <section class="stats"><article><span>XP hoje</span><strong id="total-xp">—</strong></article><article><span>Jogadores</span><strong id="players-count">—</strong></article><article><span>XP últimos 5 min</span><strong id="recent-xp">—</strong></article><article><span>Mortes hoje</span><strong id="deaths-count">—</strong></article></section>
-    <section class="panel"><h2>Experiência por jogador</h2><div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Level</th><th>XP hoje</th><th>XP 5 min</th></tr></thead><tbody id="players"><tr><td colspan="4">Aguardando dados da API…</td></tr></tbody></table></div></section>
-    <section class="panel"><h2>Mortes recentes</h2><div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Nível</th><th>Data</th></tr></thead><tbody id="deaths"><tr><td colspan="3">Aguardando dados da API…</td></tr></tbody></table></div></section>
-    <footer>Atualização automática a cada 5 minutos</footer>
-  </main><script src="static/app.js"></script>
-</body></html>
+<header><div class="brand"><div class="logo">V</div><div><small>GUILD TRACKER</small><h1>Vitoriosos</h1><p>Monitor público • DeusOLD</p></div></div><span id="connection" class="pill">● Conectando…</span></header>
+<main><div class="heading"><div><h2>Painel de atividade</h2><p>XP diário, evolução individual e mortes da guild</p></div><span id="updated">Última atualização: —</span></div>
+<div class="metrics">
+<article><label>XP total hoje</label><strong id="totalXp">—</strong><small>Desde o Server Save</small></article>
+<article><label>XP nos últimos 5 min</label><strong id="recentXp">—</strong><small>Ganho recente da guild</small></article>
+<article><label>Personagens monitorados</label><strong id="players">—</strong><small>Membros acompanhados</small></article>
+<article><label>Mortes hoje</label><strong id="deaths">—</strong><small>Após Server Save</small></article>
+</div>
+<section><div class="section-head"><h3>Experiência por personagem</h3><div class="tools"><input id="search" placeholder="Buscar personagem…"><select id="sort"><option value="xp">Maior XP diário</option><option value="recent">Maior XP recente</option><option value="name">Nome A–Z</option></select></div></div>
+<div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Level</th><th>XP hoje</th><th>XP últimos 5 min</th><th>Atualizado</th></tr></thead><tbody id="playerRows"><tr><td colspan="5" class="empty">Aguardando dados da API.</td></tr></tbody></table></div></section>
+<section><div class="section-head"><h3>Últimas mortes</h3><span class="tag">Histórico diário</span></div><div class="table-wrap"><table><thead><tr><th>Horário</th><th>Personagem</th><th>Level</th><th>Envolvidos / causa</th></tr></thead><tbody id="deathRows"><tr><td colspan="4" class="empty">Nenhuma morte carregada.</td></tr></tbody></table></div></section>
+<footer>Atualização automática a cada 5 minutos • Horário de Brasília</footer></main><script src="/static/app.js"></script></body></html>
