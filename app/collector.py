@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
-import json, os, re
+import json, os, re, unicodedata
 import sqlite3
 import requests
 
@@ -40,6 +40,12 @@ def connect():
 
 def norm(s):
     return re.sub(r"\s+", " ", (s or "")).strip()
+
+def name_key(s):
+    """Compare character names case/spacing/accent-insensitively."""
+    value = unicodedata.normalize("NFKD", norm(s).casefold())
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", value).strip()
 
 def number(s):
     s=norm(s).lower().replace("+","").replace("xp","").strip()
@@ -202,13 +208,21 @@ def collect_tibiawatch_fallback(reason):
         raise RuntimeError(f"Fonte oficial indisponível ({reason}); daily_url não configurada.")
     soup = get_soup(url)
     rows = parse_tibiawatch_daily(soup, CONFIG.get("world", "Memorium"))
-    allowed = {norm(x).casefold() for x in CONFIG.get("invited", []) if norm(x)}
+    # Use the complete roster transcribed from the guild/highscore screenshots,
+    # not only the six manually invited characters in config.json.
+    allowed = {name_key(x): norm(x) for x in load_seed_roster_names()}
+    allowed.update({name_key(x): norm(x) for x in CONFIG.get("invited", []) if norm(x)})
     if not allowed:
         raise RuntimeError(
             f"Fonte oficial recusou acesso ({reason}); Tibia Watch retornou {len(rows)} linhas, "
             "mas não há lista de personagens autorizada/configurada para filtrar a guild."
         )
-    selected = [r for k, r in rows.items() if k in allowed]
+    selected = []
+    for key, row in rows.items():
+        canonical = allowed.get(name_key(key))
+        if canonical:
+            row["name"] = canonical
+            selected.append(row)
     if not selected:
         raise RuntimeError(
             f"Fallback Tibia Watch acessível ({len(rows)} linhas), mas nenhum personagem "
@@ -246,14 +260,18 @@ def collect_tibiawatch_fallback(reason):
 
 
 
-def load_seed_roster():
-    """Use the saved roster as a filter when the public guild mirror has no members."""
+def load_seed_roster_names():
+    """Return the full saved Vitoriosos roster with canonical display names."""
     seed_path = BASE / "seed_vitoriosos.json"
     try:
         payload = json.loads(seed_path.read_text(encoding="utf-8"))
-        return {norm(row[0]).casefold() for row in payload.get("players", []) if row and row[0]}
+        return [norm(row[0]) for row in payload.get("players", []) if row and row[0]]
     except (OSError, ValueError, TypeError, IndexError):
-        return set()
+        return []
+
+def load_seed_roster():
+    """Compatibility helper for callers that need normalized roster keys."""
+    return {name_key(name) for name in load_seed_roster_names()}
 
 
 def parse_tibiawatch_world(soup, world):
@@ -289,8 +307,14 @@ def collect_tibiawatch_public():
     ranking = parse_tibiawatch_world(soup, CONFIG.get("world", "Memorium"))
     if not ranking:
         raise RuntimeError("Tibia Watch respondeu, mas o HTML público não trouxe linhas de highscores legíveis.")
-    allowed = load_seed_roster() | {norm(x).casefold() for x in CONFIG.get("invited", [])}
-    selected = [row for key, row in ranking.items() if key in allowed]
+    allowed = {name_key(x): norm(x) for x in load_seed_roster_names()}
+    allowed.update({name_key(x): norm(x) for x in CONFIG.get("invited", []) if norm(x)})
+    selected = []
+    for key, row in ranking.items():
+        canonical = allowed.get(name_key(key))
+        if canonical:
+            row["name"] = canonical
+            selected.append(row)
     if not selected:
         raise RuntimeError(f"Highscores públicos acessíveis ({len(ranking)} linhas), mas nenhum nome da lista Vitoriosos apareceu.")
     now = datetime.now(TZ)
