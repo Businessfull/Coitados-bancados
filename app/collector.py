@@ -119,6 +119,12 @@ def fetch_highscores():
     unique = {}
     for row in all_rows:
         unique[norm(row["name"])] = row
+    missing = [name for key, name in targets.items() if key not in unique]
+    if missing:
+        errors.append(
+            f"Highscore retornou {len(unique)} de {len(targets)} personagens monitorados; "
+            f"não encontrados nesta leitura: {', '.join(missing[:12])}"
+        )
     return list(unique.values()), errors
 
 def collect_once():
@@ -137,10 +143,10 @@ def collect_once():
     for row in rows:
         name = row["name"]
         previous = c.execute(
-            "SELECT total_xp FROM snapshots WHERE name=? ORDER BY id DESC LIMIT 1", (name,)
+            "SELECT total_xp FROM snapshots WHERE name=? AND total_xp IS NOT NULL ORDER BY id DESC LIMIT 1", (name,)
         ).fetchone()
         first_today = c.execute(
-            "SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",
+            "SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? AND total_xp IS NOT NULL ORDER BY id ASC LIMIT 1",
             (name, start)
         ).fetchone()
         previous_xp = previous["total_xp"] if previous else None
