@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
@@ -15,6 +15,11 @@ TZ = ZoneInfo("America/Sao_Paulo")
 
 def now_local():
     return datetime.now(TZ)
+
+def game_day(now=None):
+    # A game day starts at 10:00 in Sao Paulo, not at midnight.
+    now = now or now_local()
+    return (now - timedelta(hours=10)).date().isoformat()
 
 def db():
     c = sqlite3.connect(DB, timeout=30)
@@ -99,7 +104,7 @@ def health():
 
 @app.get("/api/dashboard")
 def dashboard():
-    today = now_local().date().isoformat()
+    today = game_day()
     c = db()
     players = [dict(x) for x in c.execute("SELECT name,level,daily_xp,recent_xp,total_xp,rank,updated_at FROM players WHERE day=? ORDER BY daily_xp DESC", (today,))]
     deaths = [dict(x) for x in c.execute("SELECT time,character,level,involved FROM deaths WHERE day=? ORDER BY id DESC LIMIT 100", (today,))]
@@ -115,7 +120,7 @@ def ingest(payload: Ingest, x_ingest_key: str = Header(default="")):
         raise HTTPException(401, "Chave de ingestão inválida")
     now = now_local()
     stamp = now.isoformat(timespec="seconds")
-    day = now.date().isoformat()
+    day = game_day(now)
     c = db()
     for p in payload.players:
         c.execute("""INSERT INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day) VALUES(?,?,?,?,?,?,?,?)
