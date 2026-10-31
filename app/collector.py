@@ -136,15 +136,15 @@ def collect_official_once():
     now=datetime.now(TZ); stamp=now.isoformat(timespec="seconds"); day=(now-timedelta(hours=10)).date().isoformat()
     guild_soup=get_soup(CONFIG["guild_url"])
     official=roster_names(guild_soup)
-    invited={x.casefold() for x in CONFIG.get("invited",[])}
-    allowed=official | invited
+    invited={name_key(x) for x in CONFIG.get("invited",[])}
+    allowed={name_key(x) for x in official} | invited
     if not allowed:
         raise RuntimeError("A página da guild não retornou membros. Verifique se o DeusOLD mudou o HTML ou bloqueou a coleta.")
     ranking=parse_ranking(get_soup(CONFIG["ranking_url"]))
     c=connect()
     accepted=0
     for key,row in ranking.items():
-        if key not in allowed: continue
+        if name_key(key) not in allowed: continue
         # Only a prior live snapshot can define recent XP; screenshot seed
         # totals are historical baselines, not a five-minute observation.
         start=server_save_start(now).isoformat(timespec="seconds")
