@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pathlib import Path
-import asyncio, os, sqlite3
+import asyncio, os, sqlite3, json
 
 BASE = Path(__file__).resolve().parent.parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data.sqlite3"))
@@ -30,6 +30,27 @@ def db():
     c.execute("""CREATE TABLE IF NOT EXISTS collector_status(id INTEGER PRIMARY KEY CHECK(id=1), last_success TEXT, last_error TEXT)""")
     c.commit()
     return c
+
+def seed_initial_players():
+    """Load the screenshot baseline once, only when the database is empty."""
+    seed_path = BASE / "seed_vitoriosos.json"
+    if not seed_path.exists():
+        return
+    c = db()
+    if c.execute("SELECT COUNT(*) FROM players").fetchone()[0] == 0:
+        payload = json.loads(seed_path.read_text(encoding="utf-8"))
+        stamp = now_local().isoformat(timespec="seconds")
+        day = game_day()
+        for name, level, rank, total_xp in payload.get("players", []):
+            c.execute(
+                "INSERT OR IGNORE INTO players(name,level,daily_xp,recent_xp,total_xp,rank,updated_at,day) VALUES(?,?,?,?,?,?,?,?)",
+                (name, level, 0, 0, total_xp, rank, stamp, day)
+            )
+            c.execute("INSERT INTO snapshots(captured_at,name,level,total_xp) VALUES(?,?,?,?)",
+                      (stamp, name, level, total_xp))
+        c.commit()
+        print(f"[seed] Loaded {len(payload.get('players', []))} screenshot baseline players")
+    c.close()
 
 def update_collector_status(success=False, error=None):
     c = db()
