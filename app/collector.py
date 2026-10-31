@@ -145,13 +145,15 @@ def collect_official_once():
     accepted=0
     for key,row in ranking.items():
         if key not in allowed: continue
-        prev=c.execute("SELECT total_xp,day FROM players WHERE name=?",(row["name"],)).fetchone()
-        recent=max(0,row["total_xp"]-(prev["total_xp"] or 0)) if prev and prev["day"]==day else 0
+        # Only a prior live snapshot can define recent XP; screenshot seed
+        # totals are historical baselines, not a five-minute observation.
+        start=server_save_start(now).isoformat(timespec="seconds")
+        previous=c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id DESC LIMIT 1",(row["name"],start)).fetchone()
+        recent=max(0,row["total_xp"]-previous["total_xp"]) if previous else 0
         # Total earned since the 10:00 server save, using the first observed
         # ranking snapshot as the baseline. The external "exp do dia" page is
         # intentionally not used: it measures differences between crawler reads,
         # not necessarily the complete guild total since server save.
-        start=server_save_start(now).isoformat(timespec="seconds")
         first=c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",(row["name"],start)).fetchone()
         base=first["total_xp"] if first else row["total_xp"]
         daily_xp=max(0,row["total_xp"]-base)
@@ -327,8 +329,9 @@ def collect_tibiawatch_public():
     start = server_save_start(now).isoformat(timespec="seconds")
     c = connect()
     for row in selected:
-        prev = c.execute("SELECT total_xp,day FROM players WHERE name=?", (row["name"],)).fetchone()
-        recent = max(0, row["total_xp"] - (prev["total_xp"] or 0)) if prev and prev["day"] == day else 0
+        previous = c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id DESC LIMIT 1",
+                              (row["name"], start)).fetchone()
+        recent = max(0, row["total_xp"] - previous["total_xp"]) if previous else 0
         first = c.execute("SELECT total_xp FROM snapshots WHERE name=? AND captured_at>=? ORDER BY id ASC LIMIT 1",
                           (row["name"], start)).fetchone()
         baseline = first["total_xp"] if first else row["total_xp"]
