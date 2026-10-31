@@ -355,12 +355,14 @@ def collect_once():
     results = []
     errors = []
 
+    # The daily XP page contains a broader set than the world page's top-20
+    # preview. Load it first, then enrich top-ranked members with total XP.
     for label, collector in (
+        ("tibiawatch_daily_xp", lambda: collect_tibiawatch_fallback(
+            "fonte pública principal de XP diário"
+        )),
         ("tibiawatch_highscores", collect_tibiawatch_public),
         ("deusold_public_pages", collect_official_once),
-        ("tibiawatch_daily_xp", lambda: collect_tibiawatch_fallback(
-            "fonte complementar de XP diário público"
-        )),
     ):
         try:
             results.append({"source": label, **collector()})
