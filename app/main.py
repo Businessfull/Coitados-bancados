@@ -99,6 +99,7 @@ async def collector_loop():
 @asynccontextmanager
 async def lifespan(app):
     db().close()
+    seed_initial_players()
     task = asyncio.create_task(collector_loop()) if os.getenv("ENABLE_COLLECTOR", "1") == "1" else None
     yield
     if task:
