@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: coitados-bancados
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    disk:
+      name: monitor-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /var/data/monitor.sqlite3
+      - key: ENABLE_COLLECTOR
+        value: "1"
+      - key: POLL_SECONDS
+        value: "300"
+      - key: PYTHON_VERSION
+        value: 3.12.4
