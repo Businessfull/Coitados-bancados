@@ -5,11 +5,11 @@
 <main><div class="heading"><div><h2>Painel de atividade</h2><p>XP diário, evolução individual e mortes da guild</p></div><span id="updated">Última atualização: —</span></div>
 <div class="metrics">
 <article><label>XP total hoje</label><strong id="totalXp">—</strong><small>Desde o Server Save</small></article>
-<article><label>XP nos últimos 5 min</label><strong id="recentXp">—</strong><small>Ganho recente da guild</small></article>
+<article><label>XP desde a última leitura</label><strong id="recentXp">—</strong><small>Variação da fonte pública</small></article>
 <article><label>Personagens monitorados</label><strong id="players">—</strong><small>Membros acompanhados</small></article>
 <article><label>Mortes hoje</label><strong id="deaths">—</strong><small>Após Server Save</small></article>
 </div>
 <section><div class="section-head"><h3>Experiência por personagem</h3><div class="tools"><input id="search" placeholder="Buscar personagem…"><select id="sort"><option value="xp">Maior XP diário</option><option value="recent">Maior XP recente</option><option value="name">Nome A–Z</option></select></div></div>
-<div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Level</th><th>XP hoje</th><th>XP últimos 5 min</th><th>Atualizado</th></tr></thead><tbody id="playerRows"><tr><td colspan="5" class="empty">Aguardando dados da API.</td></tr></tbody></table></div></section>
+<div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Level</th><th>XP hoje</th><th>XP desde leitura anterior</th><th>Atualizado</th></tr></thead><tbody id="playerRows"><tr><td colspan="5" class="empty">Aguardando dados da API.</td></tr></tbody></table></div></section>
 <section><div class="section-head"><h3>Últimas mortes</h3><span class="tag">Histórico diário</span></div><div class="table-wrap"><table><thead><tr><th>Horário</th><th>Personagem</th><th>Level</th><th>Envolvidos / causa</th></tr></thead><tbody id="deathRows"><tr><td colspan="4" class="empty">Nenhuma morte carregada.</td></tr></tbody></table></div></section>
 <footer>Atualização automática a cada 5 minutos • Horário de Brasília</footer></main><script src="/static/app.js"></script></body></html>
