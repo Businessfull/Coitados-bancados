@@ -63,7 +63,7 @@ def update_collector_status(success=False, error=None):
     last_success = now_local().isoformat(timespec="seconds") if success else (old["last_success"] if old else None)
     c.execute("""INSERT INTO collector_status(id,last_success,last_error) VALUES(1,?,?)
         ON CONFLICT(id) DO UPDATE SET last_success=excluded.last_success,last_error=excluded.last_error""",
-        (last_success, None if success else (str(error)[:500] if error else None)))
+        (last_success, str(error)[:500] if error else None))
     c.commit()
     c.close()
 
@@ -94,7 +94,8 @@ async def collector_loop():
     while True:
         try:
             result = await asyncio.to_thread(collect_once)
-            update_collector_status(success=True)
+            warnings = result.get("warnings", []) if isinstance(result, dict) else []
+            update_collector_status(success=True, error=" | ".join(warnings) if warnings else None)
             print("Collector finished:", result)
         except Exception as exc:
             update_collector_status(error=repr(exc))
