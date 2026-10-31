@@ -29,11 +29,11 @@ retry = Retry(total=2, connect=2, read=1, backoff_factor=1,
 S.mount("https://", HTTPAdapter(max_retries=retry))
 
 def norm(v):
-    return re.sub(r"\\s+", " ", str(v or "")).strip()
+    return re.sub(r"\s+", " ", str(v or "")).strip()
 
 def name_key(v):
     s = unicodedata.normalize("NFKD", norm(v).casefold())
-    return re.sub(r"\\s+", " ", "".join(c for c in s if not unicodedata.combining(c))).strip()
+    return re.sub(r"\s+", " ", "".join(c for c in s if not unicodedata.combining(c))).strip()
 
 def number(v):
     s = norm(v).lower().replace("xp", "").replace("+", "").replace(" ", "")
@@ -97,7 +97,7 @@ def fetch_ranking():
         if len(cells) < 5 or "Memorium" not in cells:
             continue
         anchors = [norm(a.get_text(" ", strip=True)) for a in tr.select("a")]
-        name = next((a for a in anchors if a and not re.fullmatch(r"#?\\d+", a)), "")
+        name = next((a for a in anchors if a and not re.fullmatch(r"#?\d+", a)), "")
         if not name:
             # Character name is normally the second table cell.
             name = cells[1] if len(cells) > 1 else ""
@@ -105,17 +105,17 @@ def fetch_ranking():
             continue
         level = 0
         for cell in cells:
-            if re.fullmatch(r"\\d{1,4}", cell):
+            if re.fullmatch(r"\d{1,4}", cell):
                 n = int(cell)
                 if 1 <= n <= 300:
                     level = n
         xp_values = [number(cell) for cell in cells
-                     if re.search(r"(?i)(kk|\\bk\\b|\\bm\\b)", cell)]
+                     if re.search(r"(?i)(kk|\bk\b|\bm\b)", cell)]
         if not xp_values:
             xp_values = [number(cell) for cell in cells
-                         if len(re.sub(r"\\D", "", cell)) >= 6]
+                         if len(re.sub(r"\D", "", cell)) >= 6]
         xp = max(xp_values, default=0)
-        rank_match = re.match(r"#?(\\d+)", cells[0])
+        rank_match = re.match(r"#?(\d+)", cells[0])
         rank = int(rank_match.group(1)) if rank_match else 0
         if level and xp:
             found[name_key(name)] = {
