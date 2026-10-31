@@ -5,7 +5,6 @@
   "timezone": "America/Sao_Paulo",
   "server_save_hour": 10,
   "poll_seconds": 300,
-  "daily_url": "https://tibiawatch.com/deusold/exp-de-hoje",
   "invited": [
     "Nattank Vitorioso",
     "Diogo Vitorioso",
@@ -13,5 +12,7 @@
     "Nobot Vitorioso",
     "Lesminha Vitorioso",
     "Gaga Vitorioso"
-  ]
+  ],
+  "ranking_url": "https://www.deusold.com/ranking",
+  "max_pages": 30
 }
