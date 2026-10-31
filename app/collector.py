@@ -26,11 +26,19 @@ def connect():
 def norm(s): return re.sub(r"\s+", " ", (s or "")).strip()
 def number(s):
     s=norm(s).lower().replace("+","").replace("xp","").strip()
+    s=re.sub(r"\\s+","",s)
     mult=1
-    if s.endswith("kk"): mult=1_000_000; s=s[:-2]
-    elif s.endswith("k"): mult=1_000; s=s[:-1]
+    if s.endswith("kk") or s.endswith("m"):
+        mult=1_000_000; s=s[:-2] if s.endswith("kk") else s[:-1]
+    elif s.endswith("k"):
+        mult=1_000; s=s[:-1]
+    # Decimal suffixes (19.2kk / 3.9M) versus thousands-separated integers.
+    if mult != 1:
+        s=s.replace(",",".")
+        try: return int(float(s)*mult)
+        except: return 0
     s=s.replace(".","").replace(",","")
-    try: return int(float(s)*mult)
+    try: return int(float(s))
     except: return 0
 
 def parse_level(s):
@@ -99,6 +107,8 @@ def collect_once():
     invited={x.casefold() for x in CONFIG.get("invited",[])}
     # Keep only official members + explicitly listed invited players, as requested.
     allowed=official | invited
+    if not allowed:
+        raise RuntimeError("Roster da guild veio vazio; coleta interrompida para não misturar personagens de outras guilds.")
     ranking=parse_ranking(get_soup(ranking_url))
     daily=parse_daily(get_soup(daily_url))
     c=connect()
