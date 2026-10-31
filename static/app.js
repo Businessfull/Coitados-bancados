@@ -17,7 +17,7 @@ async function load(){
  try{
   const r=await fetch('/api/dashboard',{cache:'no-store'}); if(!r.ok)throw Error('HTTP '+r.status);
   data=await r.json(); render(); const c=data.collector||{};
-  $('connection').textContent=c.last_error&&!c.last_success?'● Coletor com erro':(!data.players.length?'● API online • aguardando dados':'● Monitor ativo');
+  $('connection').textContent=c.last_error?'● Coletor com erro':(!data.players.length?'● API online • aguardando dados':'● Monitor ativo');
  }catch(e){$('connection').textContent='● API indisponível';$('updated').textContent='Falha ao consultar a API';}
 }
 $('search').addEventListener('input',render); $('sort').addEventListener('change',render);
