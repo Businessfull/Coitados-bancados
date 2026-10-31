@@ -353,38 +353,20 @@ def collect_tibiawatch_public():
 
 
 def collect_once():
-    """Combine public highscore, official public pages, and daily XP mirror.
+    """Use the verified public DeusOld daily-XP leaderboard as the sole live source.
 
-    The mirror's world overview may expose only a short top list. The daily
-    XP page is therefore collected as a supplement on every cycle so roster
-    members outside that short list are not silently omitted. No 403 bypass.
+    The DeusOLD origin currently refuses automated requests (HTTP 403). Do not
+    keep retrying that blocked origin or depend on its HTML. Tibia Watch
+    publishes a public DeusOld daily-XP leaderboard; we filter it against the
+    saved Vitoriosos roster and update only names actually present in that
+    source. Missing names retain their last known values instead of becoming 0.
     """
-    results = []
-    errors = []
-
-    # The daily XP page contains a broader set than the world page's top-20
-    # preview. Load it first, then enrich top-ranked members with total XP.
-    for label, collector in (
-        ("tibiawatch_daily_xp", lambda: collect_tibiawatch_fallback(
-            "fonte pública principal de XP diário"
-        )),
-        ("tibiawatch_highscores", collect_tibiawatch_public),
-        ("deusold_public_pages", collect_official_once),
-    ):
-        try:
-            results.append({"source": label, **collector()})
-        except Exception as exc:
-            message = f"{label}: {exc}"
-            errors.append(message)
-            print("[collector] Fonte indisponível:", message)
-
-    if not results:
-        raise RuntimeError("Nenhuma fonte pública conseguiu atualizar o monitor. " + " | ".join(errors))
-
+    result = collect_tibiawatch_fallback("fonte oficial DeusOLD indisponível/bloqueada")
     return {
         "ok": True,
-        "sources": results,
-        "warnings": errors,
-        "players_updated": sum(int(item.get("players_updated", 0)) for item in results),
-        "captured_at": datetime.now(TZ).isoformat(timespec="seconds"),
+        "sources": [result],
+        "warnings": [],
+        "players_updated": int(result.get("players_updated", 0)),
+        "captured_at": result.get("captured_at"),
+        "source": "tibiawatch_daily_public",
     }
