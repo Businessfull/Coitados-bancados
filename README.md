@@ -3,16 +3,16 @@
 Painel público e responsivo para celular e computador.
 
 ## Coleta automática
-- Fonte do coletor: página pública de highscores do Tibia Watch: https://tibiawatch.com/deusold/highscores
+- Fontes públicas do coletor: highscores (https://tibiawatch.com/deusold/highscores) para level/XP total e Exp do Dia (https://tibiawatch.com/deusold/exp-de-hoje) para XP diário.
 - O coletor NÃO consulta páginas de guild ou ranking bloqueadas do DeusOLD e não tenta contornar Cloudflare.
 - Os personagens do ranking são cruzados com a lista local `seed_vitoriosos.json` e os nomes adicionais de `config.json` → `invited`.
 - Level, XP total e posição vêm do ranking público.
 - XP recente é a diferença entre duas leituras consecutivas.
-- XP diário é a diferença entre a primeira e a última leitura após o server save das 10:00 (America/Sao_Paulo).
+- XP diário vem da tabela pública Exp do Dia do Tibia Watch. A própria fonte descreve a medição entre leituras diárias; ela não garante uma captura exatamente às 10h nem fornece XP minuto a minuto.
 - A coleta roda a cada 5 minutos (`POLL_SECONDS=300`).
 
 ## Limites importantes
-O ranking público pode mostrar somente os personagens dentro da profundidade publicada pelo site. O painel não pode mostrar personagens ausentes da fonte. O XP diário começa na primeira leitura bem-sucedida depois do server save; não é possível reconstruir retroativamente o XP anterior à primeira leitura. A frequência de execução do coletor não garante que a origem atualize o ranking a cada cinco minutos.
+O ranking público pode mostrar somente os personagens dentro da profundidade publicada pelo site. O painel não pode mostrar personagens ausentes da fonte. A página Exp do Dia lista os personagens medidos pela fonte (atualmente limitada aos primeiros colocados). Personagens fora da lista podem não ter um valor diário disponível. O XP recente usa a diferença entre leituras de XP total quando o highscore está acessível. A frequência de execução do coletor não garante que a origem atualize o ranking a cada cinco minutos.
 
 Se o Render receber HTTP 403 do Tibia Watch, a origem está recusando a conexão automatizada desse serviço. É necessário que a origem permita o acesso ou forneça um endpoint/API público autorizado. O coletor registra esse erro claramente e não tenta contornar a proteção.
 
