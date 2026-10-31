@@ -33,11 +33,11 @@ retry = Retry(total=2, connect=2, read=1, backoff_factor=1,
 S.mount("https://", HTTPAdapter(max_retries=retry))
 
 def norm(v):
-    return re.sub(r"\\s+", " ", str(v or "")).strip()
+    return re.sub(r"\s+", " ", str(v or "")).strip()
 
 def name_key(v):
     s = unicodedata.normalize("NFKD", norm(v).casefold())
-    return re.sub(r"\\s+", " ", "".join(c for c in s if not unicodedata.combining(c))).strip()
+    return re.sub(r"\s+", " ", "".join(c for c in s if not unicodedata.combining(c))).strip()
 
 def number(v):
     s = norm(v).lower().replace("xp", "").replace("+", "").replace(" ", "")
@@ -95,7 +95,7 @@ def row_name(tr, cells):
     # Em ambas as tabelas o nome do personagem é um link.
     for a in tr.select("a"):
         text = norm(a.get_text(" ", strip=True))
-        if text and not re.fullmatch(r"#?\\d+", text):
+        if text and not re.fullmatch(r"#?\d+", text):
             return text
     return cells[1] if len(cells) > 1 else ""
 
@@ -111,13 +111,13 @@ def fetch_highscores():
         world_index = cells.index("Memorium")
         level = 0
         for cell in cells[world_index + 1:]:
-            m = re.match(r"^(\\d{1,3})", cell)
+            m = re.match(r"^(\d{1,3})", cell)
             if m:
                 level = int(m.group(1))
                 break
-        xp_values = [number(cell) for cell in cells if re.search(r"(?i)(kk|\\bM\\b|\\bk\\b)", cell)]
+        xp_values = [number(cell) for cell in cells if re.search(r"(?i)(kk|\bM\b|\bk\b)", cell)]
         if name and level and xp_values:
-            rank_match = re.match(r"#?(\\d+)", cells[0])
+            rank_match = re.match(r"#?(\d+)", cells[0])
             found[name_key(name)] = {
                 "name": name, "level": level, "total_xp": max(xp_values),
                 "rank": int(rank_match.group(1)) if rank_match else 0
@@ -138,7 +138,7 @@ def fetch_daily_xp():
             continue
         # Formato publicado: rank, personagem, mundo, vocação, level, XP no dia.
         xp = number(cells[-1])
-        level_match = re.match(r"^(\\d{1,3})", cells[-2]) if len(cells) >= 2 else None
+        level_match = re.match(r"^(\d{1,3})", cells[-2]) if len(cells) >= 2 else None
         level = int(level_match.group(1)) if level_match else 0
         if xp >= 0:
             found[name_key(name)] = {"daily_xp": xp, "level": level}
