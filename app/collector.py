@@ -13,9 +13,23 @@ BASE = Path(__file__).resolve().parent.parent
 DB = os.getenv("DATABASE_PATH", str(BASE / "data.sqlite3"))
 CONFIG = json.loads((BASE / "config.json").read_text(encoding="utf-8"))
 TZ = ZoneInfo(CONFIG.get("timezone", "America/Sao_Paulo"))
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; GuildMonitor/1.1; public-data)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    "Cache-Control": "no-cache",
+}
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
+# Retry only transient throttling/server errors. A 403 is deliberately not
+# retried or bypassed: it indicates that the remote site refused this client.
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+_retry = Retry(total=3, connect=3, read=2, backoff_factor=1.5,
+               status_forcelist=(429, 500, 502, 503, 504),
+               allowed_methods=frozenset(["GET"]), respect_retry_after_header=True)
+SESSION.mount("https://", HTTPAdapter(max_retries=_retry))
+SESSION.mount("http://", HTTPAdapter(max_retries=_retry))
 
 def connect():
     c=sqlite3.connect(DB, timeout=30); c.row_factory=sqlite3.Row
@@ -48,7 +62,26 @@ def parse_level(s):
     return int(m.group()) if m else 0
 
 def get_soup(url):
-    r=SESSION.get(url, timeout=25); r.raise_for_status()
+    try:
+        r = SESSION.get(url, timeout=(10, 30))
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Falha de conexão ao consultar {url}: {exc}") from exc
+    if r.status_code == 403:
+        server = r.headers.get("server", "desconhecido")
+        via = r.headers.get("via", "")
+        raise RuntimeError(
+            f"DeusOLD/origem recusou a coleta (HTTP 403) em {r.url}. "
+            f"Servidor: {server}. Acesso precisa ser permitido pela origem; "
+            "o coletor não tentará contornar essa proteção."
+        )
+    if r.status_code == 429:
+        raise RuntimeError(f"Limite de requisições (HTTP 429) em {r.url}; aguarde antes de nova coleta.")
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(f"Erro HTTP {r.status_code} ao consultar {r.url}: {exc}") from exc
+    if not r.text.strip():
+        raise RuntimeError(f"A origem retornou uma página vazia: {r.url}")
     return BeautifulSoup(r.text, "html.parser")
 
 def roster_names(soup):
